@@ -1,0 +1,36 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Per-machine execution outputs and temporary files
+out/
+.release-gate-tmp/
+audit_artifacts/
+release_artifacts/v2a3/scale-work/
+release_artifacts/v2a4/fresh-extraction/
+release_artifacts/v2a4/fresh-final/
+release_artifacts/v2a4/scale-work/
+*.tmp
+*.lock
+!uv.lock
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Raw or private source captures must not be committed accidentally.
+source-snapshots/
+data/private/
+
+# Generated archives (release artifacts are created explicitly)
+*.zip
+release_artifacts/v2a4/*.sha256
+*.observation-auth.key

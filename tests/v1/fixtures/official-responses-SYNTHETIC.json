@@ -1,0 +1,14 @@
+{
+  "993578843": {
+    "registry_live": {"status": 200, "body": {"organisasjonsnummer": "993578843", "navn": "SYNTHETIC ALPHA AS"}},
+    "roles": {"status": 200, "body": {"rollegrupper": [{"type": {"kode": "STYR"}, "roller": [{"type": {"kode": "LEDE"}, "person": {"navn": {"fornavn": "Test", "etternavn": "Person"}}}]}]}},
+    "locations": {"status": 200, "body": {"_embedded": {"underenheter": [{"organisasjonsnummer": "923609016", "overordnetEnhet": "993578843", "navn": "SYNTHETIC WORKPLACE"}]}}},
+    "financials": {"status": 200, "body": [{"organisasjonsnummer": "993578843", "regnskapsperiode": {"fraDato": "2025-01-01", "tilDato": "2025-12-31"}, "valuta": "NOK", "regnskapstype": "SELSKAP", "resultatregnskapResultat": {"driftsresultat": {"driftsinntekter": {"sumDriftsinntekter": 1211}}}}]}
+  },
+  "923609016": {
+    "registry_live": {"status": 200, "body": {"organisasjonsnummer": "923609016", "navn": "SYNTHETIC BETA AS"}},
+    "roles": {"status": 200, "body": {"rollegrupper": []}},
+    "locations": {"status": 200, "body": {"_embedded": {"underenheter": []}}},
+    "financials": {"status": 200, "body": []}
+  }
+}

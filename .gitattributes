@@ -1,0 +1,8 @@
+# Hash-addressed fixtures and evidence must retain identical bytes in a
+# Windows checkout.  Do not let a user's core.autocrlf setting change JSONL,
+# JSON, or frozen CSV digests.
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.csv text eol=lf

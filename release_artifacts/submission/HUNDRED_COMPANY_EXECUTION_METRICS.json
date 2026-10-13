@@ -1,0 +1,108 @@
+{
+  "run_id": "live-hundred-20261013-001",
+  "git_commit": "553e95835857396b282345e2e72d9f1d9e1ceaca",
+  "candidate_input_sha256": "dc037f825ffbb37f8b7d4b85b033d0e99bcfef53b445dcde7b06d809214523d8",
+  "requested_companies": 100,
+  "profiles": 100,
+  "envelopes": 100,
+  "ordered_membership": true,
+  "unique_envelope_organisations": 100,
+  "identity_verified": 100,
+  "source_family_available": {
+    "registry_live": 100,
+    "roles": 100,
+    "locations": 100,
+    "financials": 100,
+    "group": 5
+  },
+  "total_claims": 3046,
+  "claims_by_field": {
+    "accounting_obligation": 100,
+    "employee_count": 13,
+    "financial_annual_result": 271,
+    "financial_assets": 271,
+    "financial_debt": 267,
+    "financial_equity": 271,
+    "financial_operating_result": 269,
+    "financial_profit_before_tax": 267,
+    "financial_revenue": 218,
+    "industry": 100,
+    "legal_form": 100,
+    "legal_name": 100,
+    "legal_status": 100,
+    "registered_address": 100,
+    "registered_legal_status": 100,
+    "registered_role": 402,
+    "registered_subunit": 81,
+    "registered_website": 13,
+    "corporate_relationship": 3
+  },
+  "available_evidence": 605,
+  "complete_available_evidence": 605,
+  "physical_requests": 500,
+  "request_statuses": {
+    "200": 405,
+    "404": 95
+  },
+  "request_family_classification": {
+    "registry_live": {
+      "success": 100
+    },
+    "roles": {
+      "success": 100
+    },
+    "locations": {
+      "success": 100
+    },
+    "financials": {
+      "success": 100
+    },
+    "group": {
+      "not_found": 95,
+      "success": 5
+    }
+  },
+  "bytes_received": 933136,
+  "latency_ms": {
+    "p50": 938,
+    "p90": 1234,
+    "p95": 1546,
+    "p99": 2281,
+    "max": 4500
+  },
+  "run_started_at": "2026-10-13T06:48:34.872663Z",
+  "run_completed_at": "2026-10-13T06:52:58.984255Z",
+  "runtime_seconds": 264.112,
+  "report_validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "semantic_integrity": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": [],
+    "semantic_errors": [],
+    "starter_compatible": {
+      "passed": true,
+      "errors": []
+    }
+  },
+  "completion_manifest": {
+    "completed_at": "2026-10-13T06:52:58.984255Z",
+    "envelope_count": 100,
+    "envelope_sha256": "c850ff3477f237ea03db74d47118f0b144ceacccd81026f76e1e08ba93641a1f",
+    "expected_input_sha256": "68c49544ce62680a2b6ccf4bcda12c27b77308d85e5e36c134f6d2bacdfebe92",
+    "identity_mode": "live_verified",
+    "modules_sha256": "5b29cd99313e4597cfd2e96eb46a83e00b359b09bbd907497434651fa69e46d1",
+    "output_target": "starter_compatible",
+    "registry_snapshot_sha256": null,
+    "report_run_id": "live-hundred-20261013-001",
+    "run_id": "live-hundred-20261013-001",
+    "status": "completed"
+  },
+  "completion_hash_matches": true,
+  "third_party_cost_usd": 0
+}

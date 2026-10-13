@@ -1,0 +1,20 @@
+{
+  "993578843": {
+    "legal_name": "SYNTHETIC ALPHA AS",
+    "registry_body": {
+      "organisasjonsnummer": "993578843",
+      "navn": "SYNTHETIC ALPHA AS",
+      "hjemmeside": "https://alpha.example.com"
+    },
+    "html": "<html><head><title>Synthetic Alpha</title></head><body><h1>Synthetic Alpha AS</h1><footer>SYNTHETIC ALPHA AS • Org.nr 993 578 843</footer></body></html>"
+  },
+  "923609016": {
+    "legal_name": "SYNTHETIC WORKPLACE AS",
+    "registry_body": {
+      "organisasjonsnummer": "923609016",
+      "navn": "SYNTHETIC WORKPLACE AS",
+      "hjemmeside": "https://workplace.example.com"
+    },
+    "html": "<html><body><h1>Synthetic Workplace AS</h1><p>Registered group entities: Org.nr 923609016 and Org.nr 993578843</p></body></html>"
+  }
+}
