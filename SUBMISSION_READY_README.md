@@ -29,6 +29,8 @@ The ZIP has project files at its root and is not a Git checkout. Do not run Git 
 
 ## Runnable zero-network sample
 
+For the full regression commands and their writable temporary-directory prerequisite, see [publication reproduction](PUBLICATION_PROVENANCE.md#reproduction). That directory is generated locally, never copied from the development workspace or committed.
+
 ```powershell
 uv run --no-sync python -S scripts/run_competition_batch.py --organisations tests/v0/demo/organisations.jsonl --bulk tests/v0/demo/frozen-registry.csv --modules registry,accounting_obligation --network-policy offline --output-target starter_compatible --profiles-output out/sample/profiles.jsonl --output out/sample/envelopes.jsonl --report out/sample/report.json --viewer-output out/sample/viewer.html --run-id sample
 ```

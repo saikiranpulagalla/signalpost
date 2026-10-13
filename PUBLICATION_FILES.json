@@ -26,8 +26,8 @@
       "bytes": 1124
     },
     "PUBLICATION_PROVENANCE.md": {
-      "sha256": "41a79bf1f5a3d9fc0a12402dee7026fb21d4dd869ec2a4203c23ce4f34f513ad",
-      "bytes": 3381
+      "sha256": "7054b0eeeae60354fb45ea0367d62d2879331435b98ef4ca27f1ef23abf8a02c",
+      "bytes": 3647
     },
     "pyproject.toml": {
       "sha256": "bea1b44f9c97a8e90b6fad6b7997e378b486af3fb00d0a0def20e26fe521a09a",
@@ -310,8 +310,8 @@
       "bytes": 1947
     },
     "SUBMISSION_READY_README.md": {
-      "sha256": "08bbda57e5b06df86fa286f39319228444fcdb47dfd77d22a2f4e3b33615102f",
-      "bytes": 8453
+      "sha256": "36c7f6c5b123b87a84669e37ff687fd8b0fedb615678e852b3bbf132dadc1dec",
+      "bytes": 8707
     },
     "tests/v0/demo/frozen-registry.csv": {
       "sha256": "aed8b2c7acb80c0e35df451bb4ce4c9c1429cb945cc9a80edf1d3474ca644712",

@@ -25,9 +25,10 @@ Registered role holders in public-source research require privacy minimization. 
 
 ## Reproduction
 
-Use Python 3.12, `uv sync --locked`, then the README offline sample. Run the complete advertised suites separately:
+Use Python 3.12, `uv sync --locked`, then the README offline sample. Some unchanged regression fixtures expect the ignored writable `.release-gate-tmp` directory to exist before test discovery. Create it explicitly (portable Python command), then run the complete advertised suites separately:
 
 ```powershell
+python -S -c "from pathlib import Path; Path('.release-gate-tmp').mkdir(exist_ok=True)"
 python -S -m unittest discover -s tests/v0 -q
 python -S -m unittest discover -s tests/v1 -q
 python -S -m unittest discover -s tests/v2 -q
