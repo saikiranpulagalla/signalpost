@@ -104,9 +104,15 @@ def verify_live_baseline(profile: dict, key: bytes) -> None:
     normalized = normalize_entity(profile["evidence"]["registry"]["value"])
     if normalized.get("organisation_number") != profile["organisation_number"]:
         raise ValueError("Retained live identity attribution mismatch")
-    for field in ("name", "legal_form", "employees", "bankrupt", "liquidating", "website", "latest_submitted_accounts"):
-        if profile.get(field) != normalized.get(field):
+    from .live_bootstrap import live_registry_projection
+    for field, expected in live_registry_projection(normalized).items():
+        if field in profile and profile[field] != expected:
             raise ValueError("Retained live baseline contradicts authenticated source")
+    for field in ("registry_live", "accounting_obligation"):
+        if not verify_receipt(profile, field, key):
+            raise ValueError("Unverifiable retained live derived observation")
+    if profile["evidence"]["registry_live"].get("value") != normalized:
+        raise ValueError("Live normalized observation contradicts authenticated source")
 
 
 def verify_source_record(profile: dict, field: str, source_dir: Path | None) -> bool:
@@ -153,3 +159,61 @@ def verify_claims(profile: dict, *, trusted_legacy: bool = False) -> None:
     actual = profile.get("research_result")
     if actual is not None and actual != build_research_result(profile):
         raise ValueError("Persisted claims contradict verified normalized observations")
+
+
+def _history_payload(profile: dict) -> dict:
+    return {"version": 1, "organisation_number": profile["organisation_number"],
+            **{key: profile.get(key, default) for key, default in (
+                ("changes", []), ("previous_evidence", {}), ("historical_observations", []))}}
+
+
+def sign_history(profile: dict, key: bytes) -> None:
+    """Call only after independently authenticating the previous/current inputs."""
+    profile["history_authentication"] = hmac.new(key,
+        json.dumps(_history_payload(profile), sort_keys=True, separators=(",", ":")).encode(), hashlib.sha256).hexdigest()
+
+
+def verify_history(profile: dict, key: bytes | None) -> None:
+    """History is a separate trust boundary, never authenticated by current claims."""
+    changes = profile.get("changes", [])
+    previous = profile.get("previous_evidence", {})
+    historical = profile.get("historical_observations", [])
+    if not changes and not previous and not historical:
+        return
+    if not isinstance(changes, list) or not isinstance(previous, dict) or not isinstance(historical, list):
+        raise ValueError("Malformed retained history")
+    expected = hmac.new(key or b"", json.dumps(_history_payload(profile), sort_keys=True,
+        separators=(",", ":")).encode(), hashlib.sha256).hexdigest()
+    if not key or not hmac.compare_digest(str(profile.get("history_authentication", "")), expected):
+        raise ValueError("Unverifiable retained history; authenticated prior inputs/key required")
+    from .refresh import supported_change
+    org = profile["organisation_number"]
+    ids = set()
+    for change in changes:
+        if not isinstance(change, dict):
+            raise ValueError("Invalid change event")
+        field = change.get("field", "")
+        module = field.split(".", 1)[0]
+        old, new = change.get("previous_evidence"), change.get("current_evidence")
+        for record in (old, new):
+            validate_metadata({"organisation_number": org, "evidence": {module: record}})
+        rebuilt = supported_change(org, field, old, new)
+        if rebuilt is None or rebuilt != change or new != profile.get("evidence", {}).get(module):
+            raise ValueError("Historical event contradicts authenticated observations")
+        if rebuilt["id"] in ids:
+            raise ValueError("Duplicate historical event")
+        ids.add(rebuilt["id"])
+    for module, record in previous.items():
+        validate_metadata({"organisation_number": org, "evidence": {module: record}})
+    seen = set()
+    for row in historical:
+        if not isinstance(row, dict) or row.get("organisation_number") != org:
+            raise ValueError("Historical observation attribution mismatch")
+        module, record = row.get("module"), row.get("evidence")
+        validate_metadata({"organisation_number": org, "evidence": {module: record}})
+        if record.get("status") != "available":
+            raise ValueError("Last-known-good record was not available")
+        identity = (module, record.get("content_sha256"), record.get("retrieved_at"))
+        if identity in seen:
+            raise ValueError("Duplicate historical observation")
+        seen.add(identity)

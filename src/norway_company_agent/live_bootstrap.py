@@ -13,6 +13,21 @@ from .http import FetchResult
 from .official import BRREG_ENTITY, accounting_obligation_assessment, normalize_entity
 
 
+def live_registry_projection(normalized: dict[str, Any]) -> dict[str, Any]:
+    """Single source of truth for every live baseline field used by claims."""
+    industry = normalized.get("industry") or {}
+    address = normalized.get("business_address") or {}
+    return {
+        **{field: normalized.get(field) for field in (
+            "name", "legal_form", "employees", "bankrupt", "liquidating", "website",
+            "business_address", "postal_address", "latest_submitted_accounts")},
+        "industry_code": industry.get("kode") if isinstance(industry, dict) else None,
+        "industry_label": industry.get("beskrivelse") if isinstance(industry, dict) else None,
+        "municipality": address.get("kommune") if isinstance(address, dict) else None,
+        "municipality_number": address.get("kommunenummer") if isinstance(address, dict) else None,
+    }
+
+
 def candidate_profiles(organisation_numbers: list[str]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Create unverified candidates; no identity fact is claimed at this point."""
     now = utc_now()
@@ -60,15 +75,7 @@ def resolve_live_identity(profile: dict[str, Any], fetcher: Callable[[str], Fetc
                 "accounting_obligation", "blocked", "official_rule_interpretation", "https://www.brreg.no/",
                 note="Live identity verification failed", retrieved_at=result.retrieved_at, source_row_key=org)
             return profile, result, False
-        profile.update({
-            "name": normalized.get("name"), "legal_form": normalized.get("legal_form"),
-            "employees": normalized.get("employees"), "bankrupt": normalized.get("bankrupt"),
-            "liquidating": normalized.get("liquidating"), "website": normalized.get("website"),
-            "industry_code": (normalized.get("industry") or {}).get("kode") if isinstance(normalized.get("industry"), dict) else None,
-            "industry_label": (normalized.get("industry") or {}).get("beskrivelse") if isinstance(normalized.get("industry"), dict) else None,
-            "business_address": normalized.get("business_address"), "postal_address": normalized.get("postal_address"),
-            "latest_submitted_accounts": normalized.get("latest_submitted_accounts"),
-        })
+        profile.update(live_registry_projection(normalized))
         record = evidence("registry", "available", "official_registry_live", source_url, value=result.body,
                           content_sha256=result.content_sha256, retrieved_at=result.retrieved_at,
                           effective_at=result.effective_at, source_row_key=org)

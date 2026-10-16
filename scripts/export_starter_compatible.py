@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from norway_company_agent.batch import canonical_organisation_number, profiles_from_bulk  # noqa: E402
-from norway_company_agent.profile_integrity import legacy_pin, validate_metadata, verify_baseline, verify_source_record, verify_claims, verify_receipt  # noqa: E402
+from norway_company_agent.profile_integrity import legacy_pin, validate_metadata, verify_baseline, verify_source_record, verify_claims, verify_receipt, verify_history  # noqa: E402
 from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, validate_starter_envelopes  # noqa: E402
 from v0_kernel.storage import atomic_json, atomic_jsonl  # noqa: E402
 
@@ -63,7 +63,8 @@ def export(profiles_path: Path, envelopes_path: Path, output_path: Path, report_
                 if field not in {"registry", "accounting_obligation"} and not (field == "website" and record.get("source_type") == "legacy_website_crawler_retired") and not (verify_receipt(profile, field, key) or verify_source_record(profile, field, source_dir)):
                     raise ValueError(f"Unverifiable persisted source: {field}; captured bytes required")
         verify_claims(profile, trusted_legacy=trusted_legacy)
-    starter = [adapt_terminal_envelope(row) for row in envelopes]
+        verify_history(profile, key)
+    starter = [adapt_terminal_envelope(row, observation_key=key) for row in envelopes]
     validation = validate_starter_envelopes(starter, expected)
     if not validation["passed"]:
         raise ValueError("starter-compatible semantic validation failed: " + "; ".join(validation["errors"]))

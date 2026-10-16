@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import sys
 from pathlib import Path
 
 
@@ -12,7 +13,11 @@ def _load(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def render(profiles: list[dict]) -> str:
+def render(profiles: list[dict], *, observation_key: bytes | None = None) -> str:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from norway_company_agent.profile_integrity import verify_history
+    for profile in profiles:
+        verify_history(profile, observation_key)
     payload = json.dumps(profiles, ensure_ascii=False).replace("<", "\\u003c")
     title = html.escape(f"Signalpost research viewer — {len(profiles)} companies")
     return f"""<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title>
@@ -26,11 +31,12 @@ function link(u,label='source'){{try{{let url=new URL(u);if(!['https:','http:'].
 function source(v){{return `${{link(v.source_url)}} <span class=\"meta\">retrieved ${{esc(v.retrieved_at)}} · effective ${{esc(v.effective_at||'not supplied')}} · SHA-256 ${{esc(v.content_sha256||'not retained')}}</span>`}}
 function claim(c,e){{return `<li id=\"${{esc(c.id)}}\"><b>${{esc(c.field)}}</b>: ${{esc(val(c.value))}} <span class=\"meta\">${{esc(val(c.reporting_period||''))}} · ${{esc(c.scope||'')}} · ${{esc(c.id)}}</span> ${{(c.evidence_fields||[]).map(k=>e[k]?source(e[k]):'<span>Evidence unavailable</span>').join(' ')}}</li>`}}
 function history(p){{let rows=p.changes||[];return `<h3>Verified change history</h3><ul>${{rows.map(c=>`<li><b>${{esc(c.field)}}</b> (${{esc(c.classification||'unclassified')}}): ${{esc(val(c.old_value))}} → ${{esc(val(c.new_value))}} <div>Previous evidence: ${{c.previous_evidence?source(c.previous_evidence):'unavailable; not comparable'}}</div><div>Current evidence: ${{c.current_evidence?source(c.current_evidence):'unavailable; not comparable'}}</div><span class=\"meta\">${{esc(c.id)}}</span></li>`).join('')||'<li>No verified material changes supplied.</li>'}}</ul>`}}
+function retained(p){{return `<details><summary>Historical / last-known-good observations (not current research)</summary><ul>${{(p.historical_observations||[]).map(x=>`<li><b>${{esc(x.module)}}</b>: ${{esc(val(x.evidence.value))}} ${{source(x.evidence)}}</li>`).join('')||'<li>No authenticated prior observations supplied.</li>'}}</ul></details>`}}
 function card(p){{
  let r=p.research_result||{{claims:[],availability:{{}}}}, s=p.synthesis||{{sentences:[]}}, e=p.evidence||{{}};
  let synth=s.sentences.map(x=>`<li>${{esc(x.text)}} <span class=\"meta\">${{(x.claim_ids||[]).map(id=>`<a href=\"#${{esc(id)}}\">${{esc(id)}}</a>`).join(' ')}} ${{esc((x.change_ids||[]).join(', '))}}</span></li>`).join('')||'<li>No supported synthesis facts.</li>';
  let sources=Object.entries(e).map(([k,v])=>`<li><b>${{esc(k)}}</b> <span class=\"chip\">${{esc(v.status)}}</span> ${{source(v)}} <span class=\"meta\">${{esc(v.completeness||'')}} ${{esc(v.note||'')}}</span></li>`).join('');
- return `<article><h2>${{esc(p.name||'Unknown legal entity')}}</h2><div class=\"meta\">Organisation number: ${{esc(p.organisation_number)}}</div><h3>Evidence-grounded overview</h3><ul>${{synth}}</ul><h3>Verified claims</h3><ul>${{r.claims.map(c=>claim(c,e)).join('')||'<li>None</li>'}}</ul>${{history(p)}}<details><summary>Sources and availability</summary><ul>${{sources}}</ul></details></article>`
+ return `<article><h2>${{esc(p.name||'Unknown legal entity')}}</h2><div class=\"meta\">Organisation number: ${{esc(p.organisation_number)}}</div><h3>Evidence-grounded overview</h3><ul>${{synth}}</ul><h3>Verified claims</h3><ul>${{r.claims.map(c=>claim(c,e)).join('')||'<li>None</li>'}}</ul>${{history(p)}}${{retained(p)}}<details><summary>Sources and availability</summary><ul>${{sources}}</ul></details></article>`
 }}
 function visible(){{let needle=q.value.toLowerCase();return data.filter(p=>`${{p.organisation_number}} ${{p.name||''}}`.toLowerCase().includes(needle))}}
 function draw(){{let rows=visible();app.innerHTML=rows.map(card).join('')||'<article>No matching profile.</article>';comparison.innerHTML=''}}q.oninput=draw;document.getElementById('compare').onclick=()=>{{let rows=visible();if(rows.length<2){{comparison.innerHTML='<article>Select at least two companies to compare.</article>';return}}let cells=rows.map(p=>{{let c=(p.research_result||{{claims:[]}}).claims||[];return `<tr><td>${{esc(p.name||'Unknown')}}</td><td>${{esc(p.organisation_number)}}</td><td>${{c.filter(x=>x.field==='registered_role').length}}</td><td>${{c.filter(x=>String(x.field).startsWith('financial_')).length}}</td><td>${{c.filter(x=>x.field==='registered_subunit').length}}</td></tr>`}}).join('');comparison.innerHTML=`<article><h2>Visible-company comparison</h2><table><tr><th>Company</th><th>Organisation</th><th>Roles</th><th>Financial facts</th><th>Subunits</th></tr>${{cells}}</table></article>`}};draw();
@@ -41,9 +47,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build local Signalpost research viewer")
     parser.add_argument("--profiles", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--observation-key", type=Path, help="Private local history authentication key; never publish")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render(_load(args.profiles)), encoding="utf-8")
+    args.output.write_text(render(_load(args.profiles), observation_key=args.observation_key.read_bytes() if args.observation_key else None), encoding="utf-8")
 
 
 if __name__ == "__main__":

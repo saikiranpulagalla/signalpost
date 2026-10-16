@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
+import hashlib
+import json
 
 
 TRACKED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -75,3 +77,44 @@ def diff_datasets(previous: list[dict[str, Any]], current: list[dict[str, Any]])
         for org in sorted(old_by_org)
         for change in diff_profile(old_by_org[org], new_by_org[org])
     ]
+
+
+def supported_change(org: str, field: str, old: dict, new: dict) -> dict | None:
+    """Reconstruct an event from verified records, not from stored event values."""
+    if field not in TRACKED_FIELDS or old.get("status") != "available" or new.get("status") != "available":
+        return None
+    module, name = field.split(".", 1)
+    def value(record):
+        data = record.get("value")
+        if module == "registry":
+            if not isinstance(data, dict):
+                raise ValueError("Historical registry identity mismatch")
+            if record.get("source_type") == "official_registry_bulk":
+                from .sampling import normalize_row
+                projected = normalize_row(data)
+            else:
+                from .official import normalize_entity
+                from .live_bootstrap import live_registry_projection
+                projected = live_registry_projection(normalize_entity(data))
+                projected["organisation_number"] = data.get("organisasjonsnummer")
+            if projected.get("organisation_number") != org:
+                raise ValueError("Historical registry identity mismatch")
+            return projected.get(name)
+        return data.get(name) if isinstance(data, dict) else None
+    a, b = value(old), value(new)
+    if a is None or b is None or a == b:
+        return None
+    change = {"organisation_number": org, "field": field, "old_value": a, "new_value": b,
+        "source_url": new.get("source_url"), "retrieved_at": new.get("retrieved_at"),
+        "effective_at": new.get("effective_at") or new.get("as_of"),
+        "source_class": new.get("source_class") or new.get("source_type"),
+        "old_content_sha256": old.get("content_sha256"), "new_content_sha256": new.get("content_sha256"),
+        "status": new.get("status")}
+    change["id"] = "change-" + hashlib.sha256(json.dumps({key: change[key] for key in (
+        "organisation_number", "field", "old_value", "new_value", "old_content_sha256", "new_content_sha256")}, sort_keys=True).encode()).hexdigest()[:24]
+    def periods(record):
+        return {json.dumps(r.get("period"), sort_keys=True) for r in record.get("value", {}).get("records", [])}
+    change["classification"] = ("historical_progression" if module == "financials" and periods(old) != periods(new)
+                                else "material_change")
+    change["previous_evidence"], change["current_evidence"] = old, new
+    return change

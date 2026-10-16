@@ -38,7 +38,7 @@ def _evidence_id(org: str, field: str, record: dict[str, Any]) -> str:
     return "ev-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
-def adapt_terminal_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes | None = None) -> dict[str, Any]:
     """Produce only fields documented by this repository's starter contract.
 
     This is deliberately *starter_compatible*, not a certification of
@@ -52,6 +52,8 @@ def adapt_terminal_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     org = canonical_organisation_number(envelope.get("organisation_number"))
     if org != profile.get("organisation_number"):
         raise ValueError("Internal envelope/profile organisation mismatch")
+    from .profile_integrity import verify_history
+    verify_history(profile, observation_key)
     source_records = profile.get("evidence")
     research = profile.get("research_result")
     if not isinstance(source_records, dict) or not isinstance(research, dict):

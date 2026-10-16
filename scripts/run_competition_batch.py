@@ -29,7 +29,7 @@ from norway_company_agent.official import fetch_official_modules  # noqa: E402
 from norway_company_agent.research_result import attach_research_result  # noqa: E402
 from norway_company_agent.live_bootstrap import candidate_profiles, resolve_live_identity  # noqa: E402
 from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, validate_starter_envelopes  # noqa: E402
-from norway_company_agent.profile_integrity import validate_metadata, verify_baseline, verify_live_baseline, verify_source_record, verify_claims, observation_key, receipt, verify_receipt  # noqa: E402
+from norway_company_agent.profile_integrity import validate_metadata, verify_baseline, verify_live_baseline, verify_source_record, verify_claims, observation_key, receipt, verify_receipt, verify_history, sign_history  # noqa: E402
 from norway_company_agent.admission import admit_wave  # noqa: E402
 from v0_kernel.storage import atomic_json, atomic_jsonl  # noqa: E402
 
@@ -568,6 +568,11 @@ def _run(args) -> None:
                 else:
                     verify_baseline(item, current_baselines[org])
                 verify_claims(item)
+                verify_history(item, private_key)
+                if args.live_bootstrap:
+                    from norway_company_agent.live_bootstrap import live_registry_projection
+                    from norway_company_agent.official import normalize_entity
+                    item.update(live_registry_projection(normalize_entity(item["evidence"]["registry"]["value"])))
                 authenticated = []
                 for module in admitted_modules:
                     if module in item.get("evidence", {}) and (verify_receipt(item, module, private_key) or verify_source_record(item, module, args.verified_source_snapshots)):
@@ -675,7 +680,7 @@ def _run(args) -> None:
                   "latencies_ms": [value for p in state.values() for value in p.get("run_metrics", {}).get("latencies_ms", [])]}
     ordered_profiles = [attach_research_result(state[org]) for org in orgs]
     if args.previous_profiles:
-        from norway_company_agent.refresh import diff_profile
+        from norway_company_agent.refresh import TRACKED_FIELDS, supported_change
         previous_rows = [json.loads(line) for line in args.previous_profiles.read_text(encoding="utf-8").splitlines() if line.strip()]
         previous_baselines, _ = profiles_from_bulk(args.previous_bulk, [p["organisation_number"] for p in previous_rows])
         prior_by_org = {p["organisation_number"]: p for p in previous_rows}
@@ -686,34 +691,38 @@ def _run(args) -> None:
             validate_metadata(previous)
             verify_baseline(previous, baseline_by_org[previous["organisation_number"]])
             verify_claims(previous)
+            verify_history(previous, private_key)
         for profile in ordered_profiles:
             previous = prior_by_org.get(profile["organisation_number"])
             profile["changes"] = []
             if previous is None:
                 continue
             history = {}
-            for change in diff_profile(previous, profile):
-                module = change["field"].split(".", 1)[0]
+            historical = list(previous.get("historical_observations", []))
+            authenticated = {"registry", "accounting_obligation"}
+            for module, record in previous.get("evidence", {}).items():
+                if record.get("status") == "available" and (module in authenticated or
+                        verify_receipt(previous, module, private_key) or
+                        verify_source_record(previous, module, args.verified_source_snapshots)):
+                    authenticated.add(module)
+                    history[module] = record
+                    historical.append({"organisation_number": profile["organisation_number"],
+                                       "module": module, "evidence": record})
+            for field in TRACKED_FIELDS:
+                module = field.split(".", 1)[0]
                 old_record = previous.get("evidence", {}).get(module, {})
                 new_record = profile.get("evidence", {}).get(module, {})
-                if old_record.get("status") != "available" or new_record.get("status") != "available":
+                if module not in authenticated:
                     continue
-                if module != "registry" and not (verify_receipt(previous, module, private_key) or verify_source_record(previous, module, args.verified_source_snapshots)):
-                    continue
-                if change["old_value"] is None or change["new_value"] is None:
-                    continue
-                change["id"] = "change-" + hashlib.sha256(json.dumps({key: change[key] for key in ("organisation_number", "field", "old_value", "new_value", "old_content_sha256", "new_content_sha256")}, sort_keys=True).encode()).hexdigest()[:24]
-                if module == "financials":
-                    def periods(record):
-                        return {json.dumps(r.get("period"), sort_keys=True) for r in record.get("value", {}).get("records", [])}
-                    change["classification"] = "historical_progression" if periods(old_record) != periods(new_record) else "material_change"
-                else:
-                    change["classification"] = "material_change"
-                change["previous_evidence"] = old_record
-                change["current_evidence"] = new_record
-                profile["changes"].append(change)
-                history[module] = old_record
+                change = supported_change(profile["organisation_number"], field, old_record, new_record)
+                if change is not None:
+                    profile["changes"].append(change)
             profile["previous_evidence"] = history
+            profile["historical_observations"] = list({
+                (row["module"], row["evidence"].get("content_sha256"), row["evidence"].get("retrieved_at")): row
+                for row in historical}.values())
+            sign_history(profile, private_key)
+            verify_history(profile, private_key)
     # Refresh is computed after claim normalization; include only its authenticated events.
     ordered_profiles = [attach_research_result(profile) for profile in ordered_profiles]
     envelopes = [
@@ -727,7 +736,7 @@ def _run(args) -> None:
     output_validation = validation
     if args.output_target == "starter_compatible" and validation["passed"]:
         try:
-            publication_envelopes = [adapt_terminal_envelope(item) for item in envelopes]
+            publication_envelopes = [adapt_terminal_envelope(item, observation_key=private_key) for item in envelopes]
             output_validation = validate_starter_envelopes(publication_envelopes, orgs)
         except ValueError as exc:
             # The starter contract does not define a semantic equivalent for
@@ -782,7 +791,7 @@ def _run(args) -> None:
         if args.viewer_output:
             from scripts.build_profile_viewer import render
             args.viewer_output.parent.mkdir(parents=True, exist_ok=True)
-            args.viewer_output.write_text(render(ordered_profiles), encoding="utf-8")
+            args.viewer_output.write_text(render(ordered_profiles, observation_key=private_key), encoding="utf-8")
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if validation["passed"] and not worker_failures:
         envelope_bytes = Path(args.output).read_bytes()
