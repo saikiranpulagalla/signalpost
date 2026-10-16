@@ -20,8 +20,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from norway_company_agent.batch import profile_complete_for_modules, profiles_from_bulk, read_organisation_inputs, terminal_envelope, validate_envelopes  # noqa: E402
 from norway_company_agent.evidence import evidence, utc_now  # noqa: E402
-from norway_company_agent.http import FetchResult, fetch_json  # noqa: E402
-from norway_company_agent.network_policy import NetworkPolicy  # noqa: E402
+from norway_company_agent.http import FetchResult, fetch_json, transport_stop_reason  # noqa: E402
+from norway_company_agent.network_policy import NetworkPolicy, ServiceCooldown  # noqa: E402
 from norway_company_agent.telemetry import RequestTelemetry, utc_now as telemetry_utc_now  # noqa: E402
 from norway_company_agent.telemetry import source_family, source_organisation_number  # noqa: E402
 from norway_company_agent.source_snapshots import SourceSnapshotStore  # noqa: E402
@@ -94,6 +94,7 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def main() -> None:
+    execution_started = time.monotonic()
     parser = argparse.ArgumentParser(description="Evaluator-owned Signalpost batch contract")
     parser.add_argument("--organisations", required=True, help="JSON, JSONL, or text organisation-number list")
     parser.add_argument("--bulk", help="Frozen Brreg entity snapshot (required for frozen_replay)")
@@ -140,6 +141,7 @@ def main() -> None:
     parser.add_argument("--modules", default="registry,accounting_obligation")
     parser.add_argument("--output-target", choices=("internal_v2", "starter_compatible"), default="internal_v2")
     args = parser.parse_args()
+    args.execution_started = execution_started
     manifest = Path(args.completion_manifest) if args.completion_manifest else Path(args.report).with_suffix(Path(args.report).suffix + ".completion.json")
     paths = [Path(args.output), Path(args.profiles_output), Path(args.report), manifest]
     if args.viewer_output:
@@ -162,7 +164,7 @@ def main() -> None:
 
 
 def _run(args) -> None:
-    deadline_started = time.monotonic()
+    deadline_started = getattr(args, "execution_started", time.monotonic())
     if args.evidence_cutoff_policy:
         raise SystemExit("Organizer cutoff semantics are not implemented; refusing to guess")
     if bool(args.previous_profiles) != bool(args.previous_bulk):
@@ -369,6 +371,7 @@ def _run(args) -> None:
     ).hexdigest()
     operations = {"requests": 0, "bytes": 0, "latencies_ms": []}
     source_request_lock = threading.Lock()
+    service_cooldown = ServiceCooldown()
     source_requests_started = 0
     source_family_started: dict[str, int] = {}
     transport_by_org: dict[str, dict] = {}
@@ -393,6 +396,12 @@ def _run(args) -> None:
                 return FetchResult(url, 0, 0, 0, error="live source URL rejected by BRREG public-API policy", retrieved_at=now)
         with source_request_lock:
             family = source_family(url)
+            stop_reason = "source service cooldown" if service_cooldown.blocked(url) else transport_stop_reason(url)
+            if stop_reason:
+                now = telemetry_utc_now()
+                telemetry.record(url=url, physical_request_number=None, started_at=now, completed_at=now,
+                                 duration_ms=0, status=0, bytes_received=0, error=stop_reason)
+                return FetchResult(url, 0, 0, 0, error=stop_reason, retrieved_at=now)
             if args.max_runtime_seconds is not None and (time.monotonic() - deadline_started) + expected_seconds.get(family, args.source_timeout_seconds) > (args.max_runtime_seconds - args.finalization_reserve_seconds):
                 now = telemetry_utc_now()
                 telemetry.record(url=url, physical_request_number=None, started_at=now, completed_at=now,
@@ -416,17 +425,28 @@ def _run(args) -> None:
             ledger = transport_by_org.setdefault(requested_org, {"requests": 0, "bytes": 0, "latencies_ms": []})
             ledger["requests"] += 1
         telemetry_started = telemetry_utc_now()
+        transport_started = time.monotonic()
         fetch_exception = None
         try:
-            result = fetch_json(url, timeout=args.source_timeout_seconds, attempts=args.source_attempts,
-                                allow_redirects=False, policy=args.network_policy)
+            options = dict(timeout=args.source_timeout_seconds, attempts=args.source_attempts,
+                           allow_redirects=False, policy=args.network_policy)
+            parameters = inspect.signature(fetch_json).parameters
+            if "deadline" in parameters:
+                options["deadline"] = (deadline_started + args.max_runtime_seconds - args.finalization_reserve_seconds
+                                       if args.max_runtime_seconds is not None else None)
+            if "on_rate_limit" in parameters:
+                options["on_rate_limit"] = lambda value: service_cooldown.limited(url, value)
+            result = fetch_json(url, **options)
         except Exception as exc:
             fetch_exception = exc
-            result = FetchResult(url, 0, 0, 0, error=type(exc).__name__, retrieved_at=telemetry_utc_now())
+            result = FetchResult(url, 0, round((time.monotonic() - transport_started) * 1000), 0,
+                                 error=type(exc).__name__, retrieved_at=telemetry_utc_now())
+        if result.status == 429:
+            service_cooldown.limited(url, result.retry_after)
         telemetry.record(url=url, physical_request_number=physical_request_number, started_at=telemetry_started,
                          completed_at=telemetry_utc_now(), duration_ms=result.elapsed_ms, status=result.status,
                          bytes_received=result.bytes_received, error=result.error,
-                         retry_count=0)
+                         retry_count=0, retry_after=result.retry_after)
         with source_request_lock:
             ledger["bytes"] += result.bytes_received
             ledger["latencies_ms"].append(result.elapsed_ms)
@@ -439,7 +459,7 @@ def _run(args) -> None:
         return result
 
     def enrich(profile: dict, modules: set[str], *, resolve_identity: bool = False) -> tuple[dict, dict]:
-        not_started = {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL", "live source URL rejected by BRREG public-API policy"}
+        not_started = {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL", "live source URL rejected by BRREG public-API policy", "source service cooldown", "transport service stopped"}
         identity_metrics: list[FetchResult] = []
         if resolve_identity and args.live_bootstrap:
             profile, identity_result, identity_verified = resolve_live_identity(profile, bounded_fetch)

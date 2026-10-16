@@ -47,7 +47,7 @@ def resolve_live_identity(profile: dict[str, Any], fetcher: Callable[[str], Fetc
     org = profile["organisation_number"]
     result = fetcher(BRREG_ENTITY.format(org=org))
     source_url = result.url or BRREG_ENTITY.format(org=org)
-    if result.status == 200:
+    if result.status == 200 and not result.error:
         normalized = normalize_entity(result.body)
         if normalized.get("organisation_number") != org:
             record = evidence("registry", "source_error", "official_registry_live", source_url,
@@ -79,7 +79,7 @@ def resolve_live_identity(profile: dict[str, Any], fetcher: Callable[[str], Fetc
                                                            source_row_key=org)
         profile["evidence"]["accounting_obligation"] = accounting_obligation_assessment(profile)
         return profile, result, True
-    status = "not_fetched" if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL"} else "not_found" if result.status in {404, 410} else "source_error"
+    status = "not_fetched" if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL", "source service cooldown", "transport service stopped"} else "not_found" if result.status in {404, 410} else "source_error"
     note = result.error or ("Live entity was not found" if status == "not_found" else "Live identity request failed")
     profile["evidence"]["registry"] = evidence("registry", status, "official_registry_live", source_url,
                                                   note=note, content_sha256=result.content_sha256,

@@ -56,10 +56,12 @@ def classify_outcome(status: int, error: str | None) -> str:
         return "redirect_rejected"
     if status == 404:
         return "not_found"
-    if status and 200 <= status < 300:
-        return "success"
     if error in {"TimeoutError", "socket.timeout"}:
         return "timeout"
+    if error:
+        return "transport_error"
+    if status and 200 <= status < 300:
+        return "success"
     return "transport_error" if error else "http_error"
 
 
@@ -85,6 +87,7 @@ class RequestTelemetry:
         attempt: int = 1,
         retry_count: int = 0,
         cache_hit: bool = False,
+        retry_after: str | None = None,
     ) -> dict[str, Any]:
         parsed = urlsplit(url)
         row: dict[str, Any] = {
@@ -104,6 +107,7 @@ class RequestTelemetry:
             "retry_count": retry_count,
             "physical_source_request_number": physical_request_number,
             "cache_hit": bool(cache_hit),
+            "retry_after": retry_after,
         }
         if self.output is not None:
             with self._lock:
