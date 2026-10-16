@@ -142,10 +142,13 @@ def main() -> None:
     parser.add_argument("--output-target", choices=("internal_v2", "starter_compatible"), default="internal_v2")
     args = parser.parse_args()
     args.execution_started = execution_started
+    args.publication_started = False
     manifest = Path(args.completion_manifest) if args.completion_manifest else Path(args.report).with_suffix(Path(args.report).suffix + ".completion.json")
     paths = [Path(args.output), Path(args.profiles_output), Path(args.report), manifest]
     if args.viewer_output:
         paths.append(args.viewer_output)
+    if args.request_telemetry:
+        paths.append(args.request_telemetry)
     if len({str(path.resolve()) for path in paths}) != len(paths):
         raise SystemExit("Run artifact paths must be distinct")
     # Acquire in canonical order before altering ANY run artifact. Locks are
@@ -157,7 +160,7 @@ def main() -> None:
             _run(args)
         except Exception as exc:
             report = Path(args.report)
-            if report.exists():
+            if args.publication_started and report.exists():
                 atomic_json(report, {"run_id": args.run_id, "status": "failed",
                                     "validation": {"passed": False, "errors": [type(exc).__name__ + ": " + str(exc)]}})
             raise
@@ -205,14 +208,8 @@ def _run(args) -> None:
             "an explicit zero source-family allocation, a local fixture, or an explicitly authorized BRREG policy"
         )
     started_at = utc_now()
-    # Supersede any prior success report before trusting resume state.  A
-    # failed attempt may retain an atomic historical output file, but it must
-    # not retain a report that represents that output as this run's success.
     report_path = Path(args.report)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps({"run_id": args.run_id, "status": "in_progress", "started_at": started_at}) + "\n", encoding="utf-8")
     manifest_path = Path(args.completion_manifest) if args.completion_manifest else report_path.with_suffix(report_path.suffix + ".completion.json")
-    atomic_json(manifest_path, {"run_id": args.run_id, "status": "in_progress", "started_at": started_at})
     organisation_inputs = read_organisation_inputs(args.organisations)
     orgs = [item["organisation_number"] for item in organisation_inputs]
     if args.expected_count is not None and len(orgs) != args.expected_count:
@@ -239,6 +236,8 @@ def _run(args) -> None:
         raise SystemExit("--source-snapshot-byte-cap must be non-negative")
     if args.source_snapshots_dir and not args.live_bootstrap:
         raise SystemExit("--source-snapshots-dir is limited to explicitly authorised live-bootstrap runs")
+    if args.source_snapshots_dir and args.source_snapshots_dir.exists():
+        raise SystemExit("source snapshot directory must be new and isolated")
     if args.max_source_requests is not None and args.source_attempts != 1:
         raise SystemExit("--max-source-requests requires --source-attempts 1 for exact accounting")
     requested_modules = [item.strip() for item in args.modules.split(",") if item.strip()]
@@ -369,6 +368,12 @@ def _run(args) -> None:
     execution_plan_sha256 = hashlib.sha256(
         json.dumps(execution_plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+    # Argument/input/path refusals above are non-mutating. Only now supersede
+    # a previous completion; an actual failed execution must not retain success.
+    args.publication_started = True
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps({"run_id": args.run_id, "status": "in_progress", "started_at": started_at}) + "\n", encoding="utf-8")
+    atomic_json(manifest_path, {"run_id": args.run_id, "status": "in_progress", "started_at": started_at})
     operations = {"requests": 0, "bytes": 0, "latencies_ms": []}
     source_request_lock = threading.Lock()
     service_cooldown = ServiceCooldown()

@@ -303,6 +303,9 @@ def _classified(field: str, source_type: str, result: FetchResult, value: Any = 
         return evidence(field, "available", source_type, result.url, value=result.body if value is None else value, content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, effective_at=result.effective_at, source_row_key=org)
     if result.status in {404, 410}:
         return evidence(field, "not_found", source_type, result.url, note=result.error, content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, effective_at=result.effective_at, source_row_key=org)
+    if result.status in {401, 403}:
+        return evidence(field, "blocked", source_type, result.url, note=result.error,
+                        content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, source_row_key=org)
     if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "source service cooldown", "transport service stopped"}:
         # This is a local execution limit, not evidence that the source
         # failed or that the company has no data.  The evaluator adapter has
@@ -342,6 +345,7 @@ def fetch_official_modules(org: str, modules: set[str], fetcher: Callable[[str],
         if result.status == 200 and not result.error:
             normalized = normalize_entity(result.body) if module == "registry_live" else normalize_financials(result.body, org) if module == "financials" else normalize_financial_history(result.body, org) if module == "financial_history" else normalize_roles(result.body) if module == "roles" else normalize_locations(result.body, org) if module == "locations" else normalize_group(result.body, org) if module == "group" else result.body
         records[module] = _classified(module, source_type, result, value=normalized, org=org)
+        records[module]["http_status"] = result.status or None
         if module == "locations" and isinstance(normalized, dict):
             records[module]["completeness"] = "complete" if normalized["complete"] else "partial"
             if normalized["rejected_records"]:

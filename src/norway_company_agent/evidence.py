@@ -13,6 +13,24 @@ EvidenceStatus = Literal[
     "blocked",
 ]
 
+EXTRACTION_VERSION = "signalpost-normalizers/2026-10-16"
+
+
+def extraction_method(field: str, source_type: str, status: str) -> dict[str, str] | None:
+    """Name code actually executed; never fabricate a source selector."""
+    if status != "available":
+        return {"name": "local source-outcome classification", "version": EXTRACTION_VERSION}
+    name = ({("registry", "official_registry_bulk"): "sampling.normalize_row",
+             ("registry", "official_registry_live"): "live_bootstrap.resolve_live_identity",
+             ("registry_live", "official_registry_live"): "official.normalize_entity",
+             ("accounting_obligation", "official_rule_interpretation"): "official.accounting_obligation_assessment",
+             ("financials", "official_annual_accounts"): "official.normalize_financials",
+             ("financial_history", "official_annual_account_copies"): "official.normalize_financial_history",
+             ("roles", "official_roles"): "official.normalize_roles",
+             ("locations", "official_subunits"): "official.normalize_locations",
+             ("group", "official_group_structure"): "official.normalize_group"}).get((field, source_type))
+    return {"name": "norway_company_agent." + name, "version": EXTRACTION_VERSION} if name else None
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -32,6 +50,7 @@ class Evidence:
     content_sha256: str | None = None
     source_row_key: str | None = None
     effective_at: str | None = None
+    extraction_method: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,4 +83,5 @@ def evidence(
         content_sha256=content_sha256,
         source_row_key=source_row_key,
         effective_at=effective_at,
+        extraction_method=extraction_method(field, source_type, status),
     ).to_dict()

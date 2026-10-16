@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime
 from typing import Any
 
@@ -73,6 +74,17 @@ def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes 
             "retrieved_at": record["retrieved_at"], "content_sha256": record["content_sha256"],
             "claim_span": field,
         })
+        row = evidence_rows[-1]
+        if record.get("extraction_method"):
+            row["extraction_method"] = record["extraction_method"]
+        else:
+            row["extraction_method_status"] = "not retained in historical observation; no method invented"
+        locators = [{"field": c.get("field"), "reporting_period": c.get("reporting_period"), **c["source_locator"]}
+                    for c in research.get("claims", []) if field in c.get("evidence_fields", []) and isinstance(c.get("source_locator"), dict)]
+        if locators:
+            row["claim_span"] = json.dumps(locators, ensure_ascii=False, sort_keys=True)
+        if record.get("completeness"):
+            row["completeness"] = record["completeness"]
     claims = []
     for claim in research.get("claims", []):
         if not isinstance(claim, dict):
@@ -99,6 +111,11 @@ def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes 
     for field, record in sorted(source_records.items()):
         if isinstance(record, dict) and record.get("status") != "available":
             errors.append(f"{field}: {starter_availability(str(record.get('status')))}")
+            errors.append(json.dumps({"source_family": field, "source_outcome": starter_availability(str(record.get("status"))),
+                **{k: record.get(k) for k in ("source_url", "retrieved_at", "content_sha256", "http_status", "note", "extraction_method")}}, sort_keys=True))
+        elif isinstance(record, dict) and record.get("completeness") == "partial":
+            errors.append(json.dumps({"source_family": field, "warning": "partial source collection; remaining pages not checked",
+                **{k: record.get(k) for k in ("source_url", "retrieved_at", "content_sha256", "note")}}, sort_keys=True))
     metric = profile.get("run_metrics") if isinstance(profile.get("run_metrics"), dict) else {}
     started = envelope.get("started_at")
     completed = envelope.get("completed_at")

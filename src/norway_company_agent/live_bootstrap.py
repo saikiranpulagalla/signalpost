@@ -86,7 +86,7 @@ def resolve_live_identity(profile: dict[str, Any], fetcher: Callable[[str], Fetc
                                                            source_row_key=org)
         profile["evidence"]["accounting_obligation"] = accounting_obligation_assessment(profile)
         return profile, result, True
-    status = "not_fetched" if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL", "source service cooldown", "transport service stopped"} else "not_found" if result.status in {404, 410} else "source_error"
+    status = "not_fetched" if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL", "source service cooldown", "transport service stopped"} else "not_found" if result.status in {404, 410} else "blocked" if result.status in {401, 403} else "source_error"
     note = result.error or ("Live entity was not found" if status == "not_found" else "Live identity request failed")
     profile["evidence"]["registry"] = evidence("registry", status, "official_registry_live", source_url,
                                                   note=note, content_sha256=result.content_sha256,
