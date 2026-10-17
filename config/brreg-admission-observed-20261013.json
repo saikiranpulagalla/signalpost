@@ -1,0 +1,75 @@
+{
+  "families": {
+    "financials": {
+      "failed_or_incomplete_samples": 0,
+      "forecast_seconds": 4.0,
+      "http_statuses": {
+        "200": 100
+      },
+      "max_seconds": 2.312,
+      "p50_seconds": 0.937,
+      "p95_seconds": 1.421,
+      "p99_seconds": 2.25,
+      "physical_samples": 100,
+      "unmeasured_samples": 0
+    },
+    "group": {
+      "failed_or_incomplete_samples": 0,
+      "forecast_seconds": 4.5,
+      "http_statuses": {
+        "200": 5,
+        "404": 95
+      },
+      "max_seconds": 2.672,
+      "p50_seconds": 0.938,
+      "p95_seconds": 1.343,
+      "p99_seconds": 1.5,
+      "physical_samples": 100,
+      "unmeasured_samples": 0
+    },
+    "locations": {
+      "failed_or_incomplete_samples": 0,
+      "forecast_seconds": 4.0,
+      "http_statuses": {
+        "200": 100
+      },
+      "max_seconds": 2.25,
+      "p50_seconds": 0.938,
+      "p95_seconds": 1.719,
+      "p99_seconds": 2.14,
+      "physical_samples": 100,
+      "unmeasured_samples": 0
+    },
+    "registry_live": {
+      "failed_or_incomplete_samples": 0,
+      "forecast_seconds": 7.0,
+      "http_statuses": {
+        "200": 100
+      },
+      "max_seconds": 4.5,
+      "p50_seconds": 0.969,
+      "p95_seconds": 1.734,
+      "p99_seconds": 2.281,
+      "physical_samples": 100,
+      "unmeasured_samples": 0
+    },
+    "roles": {
+      "failed_or_incomplete_samples": 0,
+      "forecast_seconds": 4.5,
+      "http_statuses": {
+        "200": 100
+      },
+      "max_seconds": 2.734,
+      "p50_seconds": 0.937,
+      "p95_seconds": 1.39,
+      "p99_seconds": 2.125,
+      "physical_samples": 100,
+      "unmeasured_samples": 0
+    }
+  },
+  "forecast_rule": "ceil_to_half_second(max_observed*1.5+0.25), minimum 1s; failures/missing timing include hard timeout before margin",
+  "hard_timeout_reference_seconds": 10.0,
+  "limitations": "Conditional forecast, not a hard bound or official budget. No guarantee for unseen tails. Rate limiting stops the service; it is not hidden in a latency average.",
+  "schema": "signalpost.admission-latencies/v1",
+  "telemetry_sha256": "ef66b7b76e8792febb27fdeed340c6a2a96c0d23c143c1736d442c3c3adbaac0"
+}

@@ -30,7 +30,7 @@ from norway_company_agent.research_result import attach_research_result  # noqa:
 from norway_company_agent.live_bootstrap import candidate_profiles, resolve_live_identity  # noqa: E402
 from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, validate_starter_envelopes  # noqa: E402
 from norway_company_agent.profile_integrity import validate_metadata, verify_baseline, verify_live_baseline, verify_source_record, verify_claims, observation_key, receipt, verify_receipt, verify_history, sign_history  # noqa: E402
-from norway_company_agent.admission import admit_wave  # noqa: E402
+from norway_company_agent.admission import admit_wave, plan_family_admission, latency_forecasts  # noqa: E402
 from v0_kernel.storage import atomic_json, atomic_jsonl  # noqa: E402
 
 
@@ -136,6 +136,8 @@ def main() -> None:
     parser.add_argument("--previous-profiles", type=Path, help="Explicit authenticated previous-run input for refresh; distinct from resume")
     parser.add_argument("--previous-bulk", type=Path, help="Authoritative frozen registry bytes for the previous observation")
     parser.add_argument("--source-latency-model", type=Path, help="JSON family -> conservative expected seconds; forecasts, not official limits")
+    parser.add_argument("--source-allocation-policy", choices=("family_waves", "core_breadth"), default="family_waves",
+                        help="Optional matched financial/role breadth reservation before residual family waves")
     parser.add_argument("--viewer-output", type=Path, help="Generate the verification viewer from this run's profiles")
     parser.add_argument("--evidence-cutoff-policy", type=Path, help="Reserved organizer-supplied policy; rejected until semantics are supported")
     parser.add_argument("--modules", default="registry,accounting_obligation")
@@ -317,36 +319,16 @@ def _run(args) -> None:
     expected_seconds = {family: args.source_timeout_seconds * args.source_attempts for family in module_family.values()}
     if args.source_latency_model:
         supplied = json.loads(args.source_latency_model.read_text(encoding="utf-8"))
-        if not isinstance(supplied, dict) or any(key not in expected_seconds or not isinstance(value, (int, float)) or not 0 < value < float("inf") for key, value in supplied.items()):
-            raise SystemExit("Invalid conservative source latency model")
-        expected_seconds.update(supplied)
+        expected_seconds.update(latency_forecasts(supplied, args.source_timeout_seconds * args.source_attempts))
     remaining_seconds = None if args.max_runtime_seconds is None else max(0.0, args.max_runtime_seconds - args.finalization_reserve_seconds - (time.monotonic() - deadline_started))
     if args.live_bootstrap and remaining_seconds is not None:
         remaining_seconds = max(0.0, remaining_seconds - ((len(orgs) + args.workers - 1) // args.workers) * expected_seconds["registry_live"])
-    family_remaining = dict(family_budgets)
-    for module in optional_order:
-        family = module_family[module]
-        candidates = sorted(orgs, key=lambda org: hashlib.sha256(
-            f"{args.run_id}|{module}|{org}".encode("utf-8")).hexdigest())
-        selected, forecast = admit_wave(candidates, workers=args.workers, expected_seconds=expected_seconds[family],
-                                       remaining_seconds=remaining_seconds,
-                                       request_slots=remaining_global if args.max_source_requests != 0 else None,
-                                       family_slots=family_remaining.get(family))
-        admitted_limit = len(selected)
-        if remaining_seconds is not None:
-            remaining_seconds = max(0.0, remaining_seconds - forecast)
-        if family in family_remaining:
-            family_remaining[family] -= admitted_limit
-        # An explicit zero global budget is an established test/diagnostic
-        # mode: the caller selected the work, then transport refusal must
-        # appear as ``not_fetched`` rather than being silently reclassified as
-        # a pre-run omission. Positive caps use admission to avoid promising
-        # work that cannot fit.
-        if remaining_global is not None and args.max_source_requests != 0:
-            admitted_limit = min(admitted_limit, remaining_global)
-            remaining_global -= admitted_limit
-        admission_by_module[module] = candidates[:admitted_limit]
-        omitted_by_module[module] = len(candidates) - admitted_limit
+    ranked_candidates = {module: sorted(orgs, key=lambda org: hashlib.sha256(
+        f"{args.run_id}|{module}|{org}".encode("utf-8")).hexdigest()) for module in optional_order}
+    admission_by_module, omitted_by_module = plan_family_admission(ranked_candidates,
+        module_family=module_family, expected_seconds=expected_seconds, remaining_seconds=remaining_seconds,
+        request_slots=remaining_global if args.max_source_requests != 0 else None,
+        family_slots=family_budgets, workers=args.workers, policy=args.source_allocation_policy)
     admitted_by_org = {
         org: sorted(module for module, admitted in admission_by_module.items() if org in set(admitted))
         for org in orgs
@@ -362,6 +344,7 @@ def _run(args) -> None:
             "intentionally_omitted_counts": omitted_by_module,
             "mandatory_identity_request_reserve": len(orgs) if args.live_bootstrap else 0,
             "expected_seconds_by_family": expected_seconds,
+            "allocation_policy": args.source_allocation_policy,
         },
         "policy": "zero source-family budget is an intentional pre-run omission; nonzero selected work must finish or fail closed",
     }
