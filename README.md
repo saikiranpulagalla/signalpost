@@ -110,7 +110,7 @@ The first five artifacts are produced by the example. The viewer opens locally w
 
 ## What has actually been checked
 
-**Current public runtime:** the release at `9ff81efe3e87fbd73ed9133f1036e80374c073b3` passed **342 tests**: 93 V0, 104 V1 and 145 V2. Clean locked installation, the two-company offline example, ordered starter output, completion verification and viewer/profile parity were checked. This README revision changes documentation only.
+**V2 runtime candidate:** `37dbcc3ae3ce602c2f6b1f46ea729364cf7ce837` passed **368 tests** from a fresh local clone: 93 V0, 104 V1 and 171 V2, with no skips. Locked offline installation, the two-company example, ordered starter output, completion verification, the 166-claim sanitized export and viewer/profile parity were checked. The publication handoff is a documentation-only successor of that tested runtime. [Repair verification and configuration](REPAIR_PHASE_4.md) distinguish simulated admission results from genuine research.
 
 **Earlier genuine research:** an authorized 100-company BRREG smoke recorded 100 exact identities, 500 public requests, 3,046 source-backed claims, 605 complete evidence metadata records and 264.112 seconds. It used source commit `553e95835857396b282345e2e72d9f1d9e1ceaca`, **not the current published runtime**. These historical results are not its live benchmark or an official Builderr evaluation. Metadata completeness does not imply every response body was retained.
 
@@ -134,6 +134,8 @@ These are offline regression suites. Synthetic batch tests establish local execu
 ## Source policy and limits
 
 Offline is the default network policy. Public BRREG enrichment requires both `--network-policy authorized_public_brreg` and `--confirm-authorized-live-sources`, plus applicable permission and configured resource limits. There is no automatic network fallback. Website, social and job crawling are not enabled in the competition command; registered website metadata is not verified website content.
+
+The V2 enrichment template explicitly loads the checked-in measured family model and selects `core_breadth` admission. These are conditional forecasts, not completion guarantees; unexpected latency or rate limiting can leave admitted work unattempted and prevent starter publication. Response bodies are bounded, 429 cooldown is shared across waves, and retained history has a separate authentication boundary. Fresh frozen-registry runs need no previous profiles or pre-existing private key; locally generated authentication keys must remain private.
 
 The matching frozen identity snapshot must be supplied for frozen evaluation. Organizer network budgets, evidence-cutoff semantics and artifact handling remain configuration dependencies; local starter compatibility is not full official evaluator certification. No score, qualification or ranking is claimed. Source bodies are not universally retained, and historical timing is not a guarantee for another batch or release.
 
