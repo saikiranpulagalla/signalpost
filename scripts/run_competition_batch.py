@@ -382,37 +382,33 @@ def _run(args) -> None:
                                  duration_ms=0, status=0, bytes_received=0,
                                  error="live source URL rejected by BRREG public-API policy")
                 return FetchResult(url, 0, 0, 0, error="live source URL rejected by BRREG public-API policy", retrieved_at=now)
-        with source_request_lock:
-            family = source_family(url)
-            stop_reason = "source service cooldown" if service_cooldown.blocked(url) else transport_stop_reason(url)
-            if stop_reason:
-                now = telemetry_utc_now()
-                telemetry.record(url=url, physical_request_number=None, started_at=now, completed_at=now,
-                                 duration_ms=0, status=0, bytes_received=0, error=stop_reason)
-                return FetchResult(url, 0, 0, 0, error=stop_reason, retrieved_at=now)
-            if args.max_runtime_seconds is not None and (time.monotonic() - deadline_started) + expected_seconds.get(family, args.source_timeout_seconds) > (args.max_runtime_seconds - args.finalization_reserve_seconds):
-                now = telemetry_utc_now()
-                telemetry.record(url=url, physical_request_number=None, started_at=now, completed_at=now,
-                                 duration_ms=0, status=0, bytes_received=0, error="execution deadline reserve reached")
-                return FetchResult(url, 0, 0, 0, error="execution deadline reserve reached", retrieved_at=now)
-            if args.max_source_requests is not None and source_requests_started >= args.max_source_requests:
-                now = telemetry_utc_now()
-                telemetry.record(url=url, physical_request_number=None, started_at=now, completed_at=now,
-                                 duration_ms=0, status=0, bytes_received=0, error="source request budget exhausted")
-                return FetchResult(url, 0, 0, 0, error="source request budget exhausted", retrieved_at=now)
-            family = source_family(url)
-            if family in family_budgets and source_family_started.get(family, 0) >= family_budgets[family]:
-                now = telemetry_utc_now()
-                telemetry.record(url=url, physical_request_number=None, started_at=now, completed_at=now,
-                                 duration_ms=0, status=0, bytes_received=0, error="source family budget exhausted")
-                return FetchResult(url, 0, 0, 0, error="source family budget exhausted", retrieved_at=now)
-            source_requests_started += 1
-            source_family_started[family] = source_family_started.get(family, 0) + 1
-            physical_request_number = source_requests_started
-            requested_org = source_organisation_number(url)
-            ledger = transport_by_org.setdefault(requested_org, {"requests": 0, "bytes": 0, "latencies_ms": []})
-            ledger["requests"] += 1
+        physical_request_number = None
+        ledger = None
         telemetry_started = telemetry_utc_now()
+
+        def start_request() -> str | None:
+            # Called immediately before the real opener, not before transport
+            # policy checks. Never perform disk I/O while holding these locks.
+            nonlocal source_requests_started, physical_request_number, ledger, telemetry_started
+            with source_request_lock:
+                family = source_family(url)
+                stop_reason = "source service cooldown" if service_cooldown.blocked(url) else transport_stop_reason(url)
+                if stop_reason:
+                    return stop_reason
+                if args.max_runtime_seconds is not None and (time.monotonic() - deadline_started) + expected_seconds.get(family, args.source_timeout_seconds) > (args.max_runtime_seconds - args.finalization_reserve_seconds):
+                    return "execution deadline reserve reached"
+                if args.max_source_requests is not None and source_requests_started >= args.max_source_requests:
+                    return "source request budget exhausted"
+                if family in family_budgets and source_family_started.get(family, 0) >= family_budgets[family]:
+                    return "source family budget exhausted"
+                source_requests_started += 1
+                source_family_started[family] = source_family_started.get(family, 0) + 1
+                physical_request_number = source_requests_started
+                ledger = transport_by_org.setdefault(source_organisation_number(url), {"requests": 0, "bytes": 0, "latencies_ms": []})
+                ledger["requests"] += 1
+                telemetry_started = telemetry_utc_now()
+            return None
+
         transport_started = time.monotonic()
         fetch_exception = None
         try:
@@ -424,7 +420,15 @@ def _run(args) -> None:
                                        if args.max_runtime_seconds is not None else None)
             if "on_rate_limit" in parameters:
                 options["on_rate_limit"] = lambda value: service_cooldown.limited(url, value)
-            result = fetch_json(url, **options)
+            if "on_request_start" in parameters:
+                options["on_request_start"] = start_request
+                refusal = None
+            else:
+                # Deterministic fixture transport seam; a fixture call is its
+                # simulated physical start and still uses the same atomic gate.
+                refusal = start_request()
+            result = (FetchResult(url, 0, 0, 0, error=refusal, retrieved_at=telemetry_utc_now(), request_started=False)
+                      if refusal else fetch_json(url, **options))
         except Exception as exc:
             fetch_exception = exc
             result = FetchResult(url, 0, round((time.monotonic() - transport_started) * 1000), 0,
@@ -436,8 +440,9 @@ def _run(args) -> None:
                          bytes_received=result.bytes_received, error=result.error,
                          retry_count=0, retry_after=result.retry_after)
         with source_request_lock:
-            ledger["bytes"] += result.bytes_received
-            ledger["latencies_ms"].append(result.elapsed_ms)
+            if ledger is not None:
+                ledger["bytes"] += result.bytes_received
+                ledger["latencies_ms"].append(result.elapsed_ms)
         if fetch_exception is not None:
             raise fetch_exception
         if args.live_bootstrap:

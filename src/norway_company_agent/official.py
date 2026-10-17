@@ -306,7 +306,7 @@ def _classified(field: str, source_type: str, result: FetchResult, value: Any = 
     if result.status in {401, 403}:
         return evidence(field, "blocked", source_type, result.url, note=result.error,
                         content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, source_row_key=org)
-    if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "source service cooldown", "transport service stopped"}:
+    if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "source service cooldown", "transport service stopped", "network policy offline", "network policy rejected URL"}:
         # This is a local execution limit, not evidence that the source
         # failed or that the company has no data.  The evaluator adapter has
         # no documented equivalent and therefore refuses to publish it.

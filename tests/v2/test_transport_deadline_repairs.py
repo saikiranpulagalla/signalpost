@@ -74,6 +74,23 @@ class TransportDeadlineRepairs(unittest.TestCase):
         self.assertEqual(large.error, 'ResponseTooLarge')
         self.assertIsNone(large.body); self.assertLessEqual(large.bytes_received, 51)
 
+    def test_physical_start_callback_runs_only_at_admitted_opener_boundary(self):
+        calls = []
+        def start():
+            calls.append('start')
+        good = self.fetch(response(), timeout=.5, on_request_start=start)
+        self.assertTrue(good.request_started)
+        self.assertEqual(calls, ['start'])
+        calls.clear()
+        denied = self.fetch(response(), timeout=.5, on_request_start=lambda: 'source request budget exhausted')
+        self.assertFalse(denied.request_started)
+        self.assertEqual(denied.error, 'source request budget exhausted')
+        expired = self.fetch(response(), timeout=.5, deadline=time.monotonic() - 1, on_request_start=start)
+        self.assertFalse(expired.request_started)
+        offline = fetch_json(URL, on_request_start=start)
+        self.assertFalse(offline.request_started)
+        self.assertEqual(calls, [])
+
     def test_real_httpresponse_slow_drip_absolute_deadline(self):
         start = time.monotonic()
         result = self.fetch(response(b'{"ok":true}', delay=.015), timeout=.045)
@@ -173,6 +190,39 @@ finally:print('PHYSICAL_FIXTURE_STARTS='+str(len(starts)))
             self.assertFalse((d/'envelopes.jsonl').exists())
             profiles=[json.loads(l) for l in (d/'profiles.jsonl').read_text().splitlines()]
             self.assertTrue(any(e.get('status')=='not_fetched' for x in profiles for e in x['evidence'].values()))
+
+    def test_actual_transport_quarantine_reconciles_physical_starts(self):
+        harness = r'''
+import importlib.util,sys,socket,urllib.request,time,json
+def forbidden(*a,**k):raise AssertionError('NETWORK FORBIDDEN')
+socket.create_connection=forbidden;socket.socket.connect=forbidden
+spec=importlib.util.spec_from_file_location('runner',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+starts=[]
+class Opener:
+ def open(self,*a,**k):
+  starts.append(1);time.sleep(.4);raise TimeoutError()
+urllib.request.build_opener=lambda *a,**k:Opener()
+sys.argv=sys.argv[1:]
+try:r.main()
+finally:print('ACTUAL_OPENER_STARTS='+str(len(starts)))
+'''
+        (ROOT / '.release-gate-tmp').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=ROOT / '.release-gate-tmp') as temporary:
+            d=Path(temporary)
+            p=subprocess.run([sys.executable,'-S','-c',harness,str(ROOT/'scripts/run_competition_batch.py'),
+                '--organisations','tests/v0/demo/organisations.jsonl','--bulk','tests/v0/demo/frozen-registry.csv',
+                '--modules','registry,accounting_obligation,financials,roles','--network-policy','authorized_public_brreg',
+                '--confirm-authorized-live-sources','--workers','1','--source-timeout-seconds','.03','--source-attempts','1',
+                '--max-source-requests','4','--output-target','starter_compatible','--profiles-output',str(d/'profiles.jsonl'),
+                '--output',str(d/'envelopes.jsonl'),'--report',str(d/'report.json'),
+                '--request-telemetry',str(d/'telemetry.jsonl'),'--run-id','physical-boundary'],
+                capture_output=True,text=True,cwd=ROOT,timeout=10)
+            self.assertNotEqual(p.returncode,0,p.stdout)
+            self.assertIn('ACTUAL_OPENER_STARTS=1',p.stdout,p.stderr)
+            report=json.loads((d/'report.json').read_text())
+            self.assertEqual(report['source_request_policy']['source_requests_started'],1)
+            telemetry=[json.loads(l) for l in (d/'telemetry.jsonl').read_text().splitlines()]
+            self.assertEqual(sum(t.get('physical_source_request_number') is not None for t in telemetry),1)
 
 
 if __name__ == '__main__':

@@ -31,3 +31,17 @@ deadline returned a timeout in 32 ms (Windows scheduling tolerance), rather
 than succeeding after 187 ms. The original 429 fixture now starts 2 requests,
 not 6, and refuses publication because remaining admitted work was unattempted.
 Raw audit inputs, private keys and disposable outputs are not release files.
+
+Final accounting refinement: the shared physical counter is reserved inside a
+bounded callback immediately before the opener. Transport policy, quarantine,
+cooldown and cancellation refusals do not acquire a physical sequence number.
+An actual-runner delayed-header test reconciles opener, ledger and telemetry
+counts. The transport suite now has 11 cases; telemetry 3 and offline policy 5
+also pass. An initial command used the nonexistent test_network_policy.py
+pattern and ran zero tests; the correct five-case suite was subsequently run.
+
+The final original slow-body replay exited 1 in 0.625 seconds with 5 starts and
+no terminal file: one admitted operation was not reached in the extremely tight
+300 ms budget. This supersedes the earlier replay's publication outcome, not
+its evidence of bounded body reads. It is truthful fail-closed noncompletion,
+not a promised successful batch. The 429 replay still stopped at two starts.
