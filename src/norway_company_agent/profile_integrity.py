@@ -157,7 +157,16 @@ def verify_claims(profile: dict, *, trusted_legacy: bool = False) -> None:
     if trusted_legacy:
         return  # Whole artifact is independently pinned, not self-attested.
     actual = profile.get("research_result")
-    if actual is not None and actual != build_research_result(profile):
+    expected = build_research_result(profile)
+    if isinstance(actual, dict) and "normalization_version" not in actual:
+        # Narrow migration for authenticated pre-repair observations: the old
+        # normalizer did not publish these five CSV-only fields. Existing
+        # facts must still match exactly; final publication rebuilds all facts.
+        expected.pop("normalization_version", None)
+        introduced = {"registered_address", "registered_website", "entity_register_registration_date", "incorporation_date", "registry_latest_filed_year"}
+        prior_ids = {claim.get("id") for claim in actual.get("claims", [])}
+        expected["claims"] = [c for c in expected["claims"] if c["field"] not in introduced or c["id"] in prior_ids]
+    if actual is not None and actual != expected:
         raise ValueError("Persisted claims contradict verified normalized observations")
 
 

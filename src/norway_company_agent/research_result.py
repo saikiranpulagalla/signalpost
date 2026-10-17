@@ -16,7 +16,7 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
 
-def _claim(org: str, field: str, value: Any, evidence_field: str, record: dict[str, Any], *, period: Any = None, locator: str | None = None) -> dict[str, Any]:
+def _claim(org: str, field: str, value: Any, evidence_field: str, record: dict[str, Any], *, period: Any = None, locator: str | dict[str, Any] | None = None) -> dict[str, Any]:
     digest = hashlib.sha256(f"{org}|{field}|{_canonical(value)}|{evidence_field}|{period or ''}".encode("utf-8")).hexdigest()[:24]
     result = {
         "id": f"claim-{digest}", "field": field, "value": value,
@@ -25,7 +25,7 @@ def _claim(org: str, field: str, value: Any, evidence_field: str, record: dict[s
         "retrieved_at": record.get("retrieved_at"), "reporting_period": period,
     }
     if locator and record.get("extraction_method"):
-        result["source_locator"] = {"representation": "normalized observation, not a raw-source quote", "pointer": locator}
+        result["source_locator"] = locator if isinstance(locator, dict) else {"representation": "normalized observation, not a raw-source quote", "pointer": locator}
     return result
 
 
@@ -49,6 +49,19 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
         ):
             if value not in (None, "", {}):
                 claims.append(_claim(org, field, value, "registry", registry))
+        raw = registry.get("value")
+        if registry.get("source_type") == "official_registry_bulk" and isinstance(raw, dict):
+            from .sampling import frozen_registry_details
+            live_value = (_available(profile, "registry_live") or {}).get("value") or {}
+            for field, value, columns in frozen_registry_details(raw):
+                # Prefer a separately checked current observation when present;
+                # the frozen row/evidence remains available for inspection.
+                if field == "registered_address" and isinstance(live_value, dict) and (live_value.get("business_address") or live_value.get("postal_address")):
+                    continue
+                if field == "registered_website" and isinstance(live_value, dict) and live_value.get("website"):
+                    continue
+                claims.append(_claim(org, field, value, "registry", registry, locator={
+                    "representation": "frozen CSV columns, normalization applied", "columns": columns}))
     accounting = _available(profile, "accounting_obligation")
     if accounting and accounting.get("value"):
         claims.append(_claim(org, "accounting_obligation", accounting["value"], "accounting_obligation", accounting))
@@ -86,7 +99,7 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
                 claims.append(_claim(org, "corporate_relationship", relation, "group", group, locator=f"/value/relations/{index}"))
     claims.sort(key=lambda item: (item["field"], _canonical(item["value"]), str(item.get("reporting_period") or "")))
     availability = {field: record.get("status") for field, record in sorted(profile.get("evidence", {}).items()) if isinstance(record, dict)}
-    return {"schema": "signalpost.internal.research-result/v1", "organisation_number": org,
+    return {"schema": "signalpost.internal.research-result/v1", "normalization_version": 2, "organisation_number": org,
             "claims": claims, "availability": availability}
 
 

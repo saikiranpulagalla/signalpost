@@ -7,6 +7,8 @@ import hashlib
 import random
 import heapq
 import urllib.parse
+import json
+from datetime import date
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -51,6 +53,49 @@ def normalize_row(row: dict[str, str]) -> dict[str, Any]:
         "latest_submitted_accounts": _first(row, "sisteInnsendteAarsregnskap", "Siste innsendte årsregnskap"),
         "raw": row,
     }
+
+
+def frozen_registry_details(row: dict[str, Any]) -> list[tuple[str, Any, list[str]]]:
+    """Only literal supported CSV metadata, not website content or account data."""
+    facts = []
+    address, columns = {}, []
+    for name in ("adresse", "postnummer", "poststed", "kommune", "kommunenummer", "land", "landkode"):
+        column = "forretningsadresse." + name
+        value = row.get(column)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if name == "adresse":
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+                    value = parsed
+            except (ValueError, TypeError):
+                pass  # Preserve source text; never guess address splitting.
+        if value in (None, "", []):
+            continue
+        address[name] = value
+        columns.append(column)
+    if any(name in address for name in ("adresse", "postnummer", "poststed")):
+        facts.append(("registered_address", address, columns))
+    for column in ("hjemmeside", "Hjemmeside"):
+        value = row.get(column)
+        if isinstance(value, str) and value.strip():
+            facts.append(("registered_website", value, [column])); break
+    for column, field in (("registreringsdatoEnhetsregisteret", "entity_register_registration_date"),
+                          ("stiftelsesdato", "incorporation_date")):
+        value = row.get(column)
+        if isinstance(value, str):
+            try:
+                parsed = date.fromisoformat(value)
+            except ValueError:
+                continue
+            if parsed.isoformat() == value:
+                facts.append((field, value, [column]))
+    column = "sisteInnsendteAarsregnskap"
+    value = row.get(column)
+    if isinstance(value, str) and len(value) == 4 and value.isascii() and value.isdigit() and int(value) > 0:
+        facts.append(("registry_latest_filed_year", int(value), [column]))
+    return facts
 
 
 def stratum(record: dict[str, Any]) -> str:

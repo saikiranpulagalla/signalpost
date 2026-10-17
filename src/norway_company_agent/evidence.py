@@ -20,7 +20,7 @@ def extraction_method(field: str, source_type: str, status: str) -> dict[str, st
     """Name code actually executed; never fabricate a source selector."""
     if status != "available":
         return {"name": "local source-outcome classification", "version": EXTRACTION_VERSION}
-    name = ({("registry", "official_registry_bulk"): "sampling.normalize_row",
+    name = ({("registry", "official_registry_bulk"): "sampling.normalize_row + sampling.frozen_registry_details",
              ("registry", "official_registry_live"): "live_bootstrap.resolve_live_identity",
              ("registry_live", "official_registry_live"): "official.normalize_entity",
              ("accounting_obligation", "official_rule_interpretation"): "official.accounting_obligation_assessment",
