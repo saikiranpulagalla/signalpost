@@ -25,11 +25,17 @@ def main():
     harness=f.HARNESS.replace("def forbidden(*a,**k):raise AssertionError('EXTERNAL NETWORK START')",
         "external=[]\ndef forbidden(*a,**k):\n external.append(1);raise AssertionError('EXTERNAL NETWORK START')")
     harness=harness.replace("'external_network_starts':0","'external_network_starts':len(external)")
+    # The inherited transport is a source-shape fixture, not a coherent
+    # multi-company registry. Supply unique, valid subunit IDs for this corpus.
+    harness=harness.replace("mode=sys.argv[2];lock=", "branches=json.loads(__import__('pathlib').Path(sys.argv.pop(3)).read_text());mode=sys.argv[2];lock=")
+    harness=harness.replace("'organisasjonsnummer':'910608193'", "'organisasjonsnummer':branches[org]")
     results=[]
     read=lambda file:[json.loads(s) for s in file.read_text(encoding='utf-8').splitlines() if s.strip()]
     for count in map(int,a.sizes.split(',')):
         identities=f.identities(count);source=out/f'input-{count}';source.mkdir()
         batch=source/'batch.jsonl';bulk=source/'registry.csv'
+        extra=[org for org in f.identities(count*2) if org not in set(identities)]
+        branches=source/'branches.json';branches.write_text(json.dumps(dict(zip(identities,extra))))
         batch.write_text(''.join(json.dumps({'organisation_number':org})+'\n' for org in identities))
         with bulk.open('w',newline='',encoding='utf-8') as h:
             w=csv.DictWriter(h,fieldnames=['organisasjonsnummer','navn','organisasjonsform.kode','aktivitet','vedtektsfestetFormaal']);w.writeheader()
@@ -50,13 +56,15 @@ def main():
                     '--request-telemetry',str(d/'telemetry.jsonl'),'--viewer-output',str(d/'viewer.html'),'--run-id','identical-comparison']
                 env=os.environ.copy();env['TEMP']=env['TMP']=str(d)
                 start=time.monotonic()
-                proc=subprocess.run([sys.executable,'-S','-c',harness,str(root/'scripts/run_competition_batch.py'),'observed-tail',*args],
+                proc=subprocess.run([sys.executable,'-S','-c',harness,str(root/'scripts/run_competition_batch.py'),'observed-tail',str(branches),*args],
                     cwd=root,env=env,capture_output=True,text=True,encoding='utf-8',timeout=150)
                 wall=time.monotonic()-start
                 (d/'stdout.log').write_text(proc.stdout,encoding='utf-8');(d/'stderr.log').write_text(proc.stderr,encoding='utf-8')
                 if proc.returncode:raise RuntimeError(f'{label}/{count}/{seconds}: {proc.stderr[-1000:]}')
                 measure=json.loads(proc.stdout.split('FIXTURE_MEASUREMENTS=')[-1]);assert measure['external_network_starts']==0
                 profiles=read(d/'profiles.jsonl');envelopes=read(d/'envelopes.jsonl');report=json.loads((d/'report.json').read_text())
+                subunits=[(c['value']['organisation_number'],p['organisation_number']) for p in profiles for c in p['research_result']['claims'] if c['field']=='registered_subunit']
+                assert len({unit for unit,_ in subunits})==len(subunits)
                 assert validate_starter_envelopes(envelopes,identities)['passed']
                 verify_completion(report=d/'report.json',output=d/'envelopes.jsonl',profiles=d/'profiles.jsonl')
                 assert json.loads(re.search(r'id="profiles">(.*?)</script>',(d/'viewer.html').read_text(encoding='utf-8'),re.S).group(1))==profiles
