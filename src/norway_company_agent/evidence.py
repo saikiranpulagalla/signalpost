@@ -29,7 +29,8 @@ def extraction_method(field: str, source_type: str, status: str) -> dict[str, st
              ("roles", "official_roles"): "official.normalize_roles",
              ("locations", "official_subunits"): "official.normalize_locations",
              ("group", "official_group_structure"): "official.normalize_group"}).get((field, source_type))
-    return {"name": "norway_company_agent." + name, "version": EXTRACTION_VERSION} if name else None
+    version = "signalpost-frozen-declarations/2026-10-20" if (field, source_type) == ("registry", "official_registry_bulk") else EXTRACTION_VERSION
+    return {"name": "norway_company_agent." + name, "version": version} if name else None
 
 
 def utc_now() -> str:

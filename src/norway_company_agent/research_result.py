@@ -99,7 +99,8 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
                 claims.append(_claim(org, "corporate_relationship", relation, "group", group, locator=f"/value/relations/{index}"))
     claims.sort(key=lambda item: (item["field"], _canonical(item["value"]), str(item.get("reporting_period") or "")))
     availability = {field: record.get("status") for field, record in sorted(profile.get("evidence", {}).items()) if isinstance(record, dict)}
-    return {"schema": "signalpost.internal.research-result/v1", "normalization_version": 2, "organisation_number": org,
+    version = 3 if any(c["field"] in {"registered_activity", "registered_purpose"} for c in claims) else 2
+    return {"schema": "signalpost.internal.research-result/v1", "normalization_version": version, "organisation_number": org,
             "claims": claims, "availability": availability}
 
 

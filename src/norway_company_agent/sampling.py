@@ -58,6 +58,13 @@ def normalize_row(row: dict[str, str]) -> dict[str, Any]:
 def frozen_registry_details(row: dict[str, Any]) -> list[tuple[str, Any, list[str]]]:
     """Only literal supported CSV metadata, not website content or account data."""
     facts = []
+    # BRREG v2 documents these literal CSV columns. They are registered
+    # declarations, not independently observed operations or dated news.
+    for column, field in (("aktivitet", "registered_activity"),
+                          ("vedtektsfestetFormaal", "registered_purpose")):
+        value = registered_declaration(row.get(column))
+        if value is not None:
+            facts.append((field, value, [column]))
     address, columns = {}, []
     for name in ("adresse", "postnummer", "poststed", "kommune", "kommunenummer", "land", "landkode"):
         column = "forretningsadresse." + name
@@ -96,6 +103,28 @@ def frozen_registry_details(row: dict[str, Any]) -> list[tuple[str, Any, list[st
     if isinstance(value, str) and len(value) == 4 and value.isascii() and value.isdigit() and int(value) > 0:
         facts.append(("registry_latest_filed_year", int(value), [column]))
     return facts
+
+
+def registered_declaration(value: Any) -> str | list[str] | None:
+    """Preserve CSV text or explicit string arrays; never infer list splitting.
+
+    Missing/malformed structured values do not become negative findings.
+    No dates, operational assertions or contact-person details are derived.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.startswith(("[", "{")):
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            return None
+        if not isinstance(parsed, list) or not parsed or any(
+                not isinstance(item, str) or not item.strip() for item in parsed):
+            return None
+        # Keep original order/text rather than guessing sentence boundaries.
+        return parsed
+    return value
 
 
 def stratum(record: dict[str, Any]) -> str:

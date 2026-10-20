@@ -21,6 +21,14 @@ def build_synthesis(result: dict, changes=()) -> dict:
         value = industry[0]["value"]
         label = (value.get("description") or value.get("code")) if isinstance(value, dict) else value
         if label: add("Business and locations", f"Registered industry: {label}.", industry[:1])
+    for field, label in (("registered_activity", "Registered activity declaration"),
+                         ("registered_purpose", "Registered legal purpose")):
+        for c in fields.get(field, [])[:1]:
+            value = c.get("value")
+            if isinstance(value, list) and value and all(isinstance(s, str) for s in value):
+                value = " / ".join(value)
+            if isinstance(value, str) and value.strip():
+                add("Registered business declarations", f"{label}: {value}. This is a registry declaration, not verification of actual operations.", [c])
     roles = [c for c in fields.get("registered_role", []) if isinstance(c["value"], dict) and not c["value"].get("inactive")]
     for c in roles[:3]:
         v=c["value"]

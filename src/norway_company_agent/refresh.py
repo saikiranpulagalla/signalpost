@@ -12,6 +12,8 @@ TRACKED_FIELDS: dict[str, tuple[str, ...]] = {
     "registry.municipality": ("municipality",),
     "registry.website": ("website",),
     "registry.latest_submitted_accounts": ("latest_submitted_accounts",),
+    "registry.registered_activity": ("evidence", "registry", "value", "aktivitet"),
+    "registry.registered_purpose": ("evidence", "registry", "value", "vedtektsfestetFormaal"),
     "financials.records": ("evidence", "financials", "value", "records"),
     "financial_history.years": ("evidence", "financial_history", "value", "years"),
     "roles.roles": ("evidence", "roles", "value", "roles"),
@@ -34,6 +36,8 @@ def _evidence_for(profile: dict[str, Any], field: str) -> dict[str, Any]:
     module = field.split(".", 1)[0]
     records = profile.get("evidence", {})
     if module == "registry":
+        if field in {"registry.registered_activity", "registry.registered_purpose"}:
+            return records.get("registry", {})
         return records.get("registry_live") or records.get("registry", {})
     return records.get(module, {})
 
@@ -90,8 +94,9 @@ def supported_change(org: str, field: str, old: dict, new: dict) -> dict | None:
             if not isinstance(data, dict):
                 raise ValueError("Historical registry identity mismatch")
             if record.get("source_type") == "official_registry_bulk":
-                from .sampling import normalize_row
+                from .sampling import normalize_row, frozen_registry_details
                 projected = normalize_row(data)
+                projected.update({key: value for key, value, _ in frozen_registry_details(data)})
             else:
                 from .official import normalize_entity
                 from .live_bootstrap import live_registry_projection
