@@ -16,6 +16,9 @@ def main():
     p.add_argument('--verified-source-snapshots',type=Path);p.add_argument('--report',type=Path)
     p.add_argument('--telemetry',type=Path)
     a=p.parse_args()
+    if a.output.exists():p.error('Coverage output must be new; never overwrite an existing artifact')
+    if a.verified_source_snapshots and a.output.resolve().is_relative_to(a.verified_source_snapshots.resolve()):
+        p.error('Captured source directory is read-only')
     protected=[a.profiles,a.envelopes,a.organisations,a.bulk,a.observation_key,a.report,a.telemetry]
     if a.output.resolve() in {x.resolve() for x in protected if x}:p.error('Output must not overwrite an input/key')
     read=lambda path:[json.loads(s) for s in path.read_text(encoding='utf-8').splitlines() if s.strip()]

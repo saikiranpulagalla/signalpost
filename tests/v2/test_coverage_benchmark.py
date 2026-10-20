@@ -59,6 +59,11 @@ class CoverageBenchmark(unittest.TestCase):
         self.assertEqual(p.returncode,0,p.stderr)
         result=json.loads(output.read_text());self.assertEqual(result['completion_bindings'],'PASS')
         self.assertEqual(result['companies'],1);self.assertEqual(result['export_missing_facts'],0)
+        manifest=d/'report.json.completion.json';old=manifest.read_bytes()
+        bad=subprocess.run([sys.executable,'-S','scripts/evaluate_coverage.py','--profiles',str(d/'profiles.jsonl'),
+            '--envelopes',str(d/'output.jsonl'),'--organisations',str(self.case.batch),
+            '--evidence-class','synthetic','--output',str(manifest)],cwd=ROOT,capture_output=True,text=True)
+        self.assertNotEqual(bad.returncode,0);self.assertEqual(manifest.read_bytes(),old)
 
     def test_selection_is_pinned_deterministic_and_excludes_historical_sample(self):
         spec=importlib.util.spec_from_file_location('coverage_selection',ROOT/'scripts/select_coverage_sample.py')
