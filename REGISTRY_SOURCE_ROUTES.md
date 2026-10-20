@@ -1,5 +1,10 @@
 # Registry declaration source gate — 20 October 2026
 
+Historical findings at21d6592. The subsequent offline registry-live extraction
+and still-unapproved small pilot are documented in
+[live declaration pilot plan](LIVE_DECLARATIONS_PILOT_PLAN.md). Statements below
+about the old live normalizer describe that earlier candidate.
+
 This extends local candidate10743a7. Submitted V2cf68573 remains the rollback.
 No revision is recommended until genuine attributable incremental coverage is
 measured. Synthetic declaration counts are not competition recall.

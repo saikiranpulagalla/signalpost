@@ -60,6 +60,8 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
                     continue
                 if field == "registered_website" and isinstance(live_value, dict) and live_value.get("website"):
                     continue
+                if field in {"registered_activity", "registered_purpose"} and isinstance(live_value, dict) and live_value.get(field) not in (None, "", []):
+                    continue  # Current declaration once; frozen observation remains inspectable.
                 claims.append(_claim(org, field, value, "registry", registry, locator={
                     "representation": "frozen CSV columns, normalization applied", "columns": columns}))
     accounting = _available(profile, "accounting_obligation")
@@ -73,6 +75,11 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
                             ("registered_legal_status", {key: value[key] for key in ("bankrupt", "liquidating") if isinstance(value.get(key), bool)})):
             if item not in (None, "", {}):
                 claims.append(_claim(org, field, item, "registry_live", live))
+        if value.get("declaration_projection_version") == 1:
+            for field, source in (("registered_activity", "aktivitet"), ("registered_purpose", "vedtektsfestetFormaal")):
+                if value.get(field) not in (None, "", []):
+                    claims.append(_claim(org, field, value[field], "registry_live", live, locator={
+                        "representation": "registered JSON declaration; not observed operations", "pointer": "/" + source}))
     roles = _available(profile, "roles")
     if roles and isinstance(roles.get("value"), dict):
         for index, role in enumerate(roles["value"].get("roles", [])):
@@ -100,6 +107,8 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
     claims.sort(key=lambda item: (item["field"], _canonical(item["value"]), str(item.get("reporting_period") or "")))
     availability = {field: record.get("status") for field, record in sorted(profile.get("evidence", {}).items()) if isinstance(record, dict)}
     version = 3 if any(c["field"] in {"registered_activity", "registered_purpose"} for c in claims) else 2
+    if live and (live.get("value") or {}).get("declaration_projection_version") == 1:
+        version = 4
     return {"schema": "signalpost.internal.research-result/v1", "normalization_version": version, "organisation_number": org,
             "claims": claims, "availability": availability}
 

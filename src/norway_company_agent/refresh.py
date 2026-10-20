@@ -14,6 +14,8 @@ TRACKED_FIELDS: dict[str, tuple[str, ...]] = {
     "registry.latest_submitted_accounts": ("latest_submitted_accounts",),
     "registry.registered_activity": ("evidence", "registry", "value", "aktivitet"),
     "registry.registered_purpose": ("evidence", "registry", "value", "vedtektsfestetFormaal"),
+    "registry_live.registered_activity": ("evidence", "registry_live", "value", "registered_activity"),
+    "registry_live.registered_purpose": ("evidence", "registry_live", "value", "registered_purpose"),
     "financials.records": ("evidence", "financials", "value", "records"),
     "financial_history.years": ("evidence", "financial_history", "value", "years"),
     "roles.roles": ("evidence", "roles", "value", "roles"),

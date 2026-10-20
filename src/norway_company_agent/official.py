@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 import re
 import threading
 import time
@@ -281,9 +282,9 @@ def normalize_group(body: Any, org: str) -> dict[str, Any]:
     return {"relations": relations}
 
 
-def normalize_entity(body: Any) -> dict[str, Any]:
+def normalize_entity(body: Any, *, declarations: bool = False) -> dict[str, Any]:
     body = body if isinstance(body, dict) else {}
-    return {
+    result = {
         "organisation_number": body.get("organisasjonsnummer"),
         "name": body.get("navn"),
         "legal_form": _get(body, "organisasjonsform", "kode"),
@@ -296,6 +297,17 @@ def normalize_entity(body: Any) -> dict[str, Any]:
         "postal_address": body.get("postadresse"),
         "latest_submitted_accounts": body.get("sisteInnsendteAarsregnskap"),
     }
+    if declarations:
+        from .sampling import registered_declaration
+        for source, field in (("aktivitet", "registered_activity"), ("vedtektsfestetFormaal", "registered_purpose")):
+            raw = body.get(source)
+            if isinstance(raw, list):
+                raw = json.dumps(raw, ensure_ascii=False)
+            value = registered_declaration(raw)
+            if value is not None and len(json.dumps(value, ensure_ascii=False).encode("utf-8")) <= 1_000_000:
+                result[field] = list(dict.fromkeys(value)) if isinstance(value, list) else value
+                result["declaration_projection_version"] = 1
+    return result
 
 
 def _classified(field: str, source_type: str, result: FetchResult, value: Any = None, *, org: str | None = None) -> dict[str, Any]:
@@ -337,14 +349,16 @@ def fetch_official_modules(org: str, modules: set[str], fetcher: Callable[[str],
         result = _fetch_history(url) if module == "financial_history" and fetcher is fetch_json else fetcher(url)
         metrics.append(result)
         normalized = None
-        if result.status == 200 and module in {"roles", "registry_live", "group"} and isinstance(result.body, dict) and result.body.get("organisasjonsnummer") not in (None, org):
+        if result.status == 200 and ((module == "registry_live" and (not isinstance(result.body, dict) or result.body.get("organisasjonsnummer") != org)) or (module in {"roles", "group"} and isinstance(result.body, dict) and result.body.get("organisasjonsnummer") not in (None, org))):
             records[module] = evidence(module, "source_error", source_type, result.url,
                 note="Returned source organisation conflicts with requested identity",
                 content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, source_row_key=org)
             continue
         if result.status == 200 and not result.error:
-            normalized = normalize_entity(result.body) if module == "registry_live" else normalize_financials(result.body, org) if module == "financials" else normalize_financial_history(result.body, org) if module == "financial_history" else normalize_roles(result.body) if module == "roles" else normalize_locations(result.body, org) if module == "locations" else normalize_group(result.body, org) if module == "group" else result.body
+            normalized = normalize_entity(result.body, declarations=True) if module == "registry_live" else normalize_financials(result.body, org) if module == "financials" else normalize_financial_history(result.body, org) if module == "financial_history" else normalize_roles(result.body) if module == "roles" else normalize_locations(result.body, org) if module == "locations" else normalize_group(result.body, org) if module == "group" else result.body
         records[module] = _classified(module, source_type, result, value=normalized, org=org)
+        if module == "registry_live" and isinstance(normalized, dict) and normalized.get("declaration_projection_version") == 1:
+            records[module]["extraction_method"]["version"] = "signalpost-live-declarations/2026-10-20"
         records[module]["http_status"] = result.status or None
         if module == "locations" and isinstance(normalized, dict):
             records[module]["completeness"] = "complete" if normalized["complete"] else "partial"
