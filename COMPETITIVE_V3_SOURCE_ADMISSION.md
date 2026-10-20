@@ -1,5 +1,10 @@
 # Source admission and rule reconciliation — 20 October 2026
 
+Historical pre-acquisition research from candidate10743a7. A subsequent separately
+authorized bounded acquisition and its unsuccessful outcome are documented in
+[registry source routes](REGISTRY_SOURCE_ROUTES.md); the no-request statement
+below describes this earlier research milestone, not the later measurement.
+
 Documentation requests only. No new company-source measurements, tokens,
 paid APIs, crawler access, email, deployment or publication occurred.
 
