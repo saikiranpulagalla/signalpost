@@ -118,7 +118,13 @@ class OfflineNetworkPolicy(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(calls, [])
         profile = json.loads((self.root / "profiles-1.jsonl").read_text(encoding="utf-8").splitlines()[0])
-        self.assertEqual(profile["evidence"]["roles"]["status"], "not_fetched")
+        # A zero global cap is now an intentional pre-run omission, not
+        # admitted work that unexpectedly remained not_fetched.
+        self.assertNotIn("roles", profile["evidence"])
+        report = json.loads((self.root / "report-1.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["execution_plan"]["admission"]["admitted_organisations"]["roles"], [])
+        self.assertEqual(report["source_request_policy"]["source_requests_started"], 0)
+        self.assertEqual(report["operations"]["requests"], 0)
 
     def test_saved_profile_export_and_resume_remain_offline(self):
         export = self.root / "saved-export.jsonl"

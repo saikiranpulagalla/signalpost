@@ -333,7 +333,7 @@ def _run(args) -> None:
         f"{args.run_id}|{module}|{org}".encode("utf-8")).hexdigest()) for module in optional_order}
     admission_by_module, omitted_by_module = plan_family_admission(ranked_candidates,
         module_family=module_family, expected_seconds=expected_seconds, remaining_seconds=remaining_seconds,
-        request_slots=remaining_global if args.max_source_requests != 0 else None,
+        request_slots=remaining_global,
         family_slots=family_budgets, workers=args.workers, policy=args.source_allocation_policy)
     admitted_by_org = admitted_modules_by_org(orgs, admission_by_module)
     execution_plan = {
