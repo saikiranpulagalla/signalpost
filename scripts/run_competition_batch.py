@@ -155,6 +155,13 @@ def main() -> None:
         paths.append(args.viewer_output)
     if args.request_telemetry:
         paths.append(args.request_telemetry)
+    key_path = args.observation_key or Path(args.report).with_suffix(Path(args.report).suffix + ".observation-auth.key")
+    # Reserve the authentication key before even creating ownership anchors.
+    # resolve handles relative/symlink aliases; samefile covers existing hardlinks.
+    for path in paths:
+        if (path.resolve() == key_path.resolve() or
+                (path.exists() and key_path.exists() and path.samefile(key_path))):
+            raise SystemExit("Private observation key must not alias a run artifact")
     if len({str(path.resolve()) for path in paths}) != len(paths):
         raise SystemExit("Run artifact paths must be distinct")
     # Acquire in canonical order before altering ANY run artifact. Locks are
