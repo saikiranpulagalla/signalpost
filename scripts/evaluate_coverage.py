@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));sys.path.i
 from norway_company_agent.batch import profiles_from_bulk,read_organisation_numbers
 from norway_company_agent.coverage_benchmark import evaluate,telemetry_metrics
 from norway_company_agent.completion import verify_completion
-from v0_kernel.storage import atomic_json
+from v0_kernel.storage import atomic_json,read_jsonl
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -21,7 +21,7 @@ def main():
         p.error('Captured source directory is read-only')
     protected=[a.profiles,a.envelopes,a.organisations,a.bulk,a.observation_key,a.report,a.telemetry]
     if a.output.resolve() in {x.resolve() for x in protected if x}:p.error('Output must not overwrite an input/key')
-    read=lambda path:[json.loads(s) for s in path.read_text(encoding='utf-8').splitlines() if s.strip()]
+    read=read_jsonl
     orgs=read_organisation_numbers(a.organisations)
     baselines={p['organisation_number']:p for p in profiles_from_bulk(a.bulk,orgs)[0]} if a.bulk else None
     key=a.observation_key.read_bytes() if a.observation_key else None

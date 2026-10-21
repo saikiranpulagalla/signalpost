@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .registry import FIELDS, REGISTRY_SOURCE, _pick, registry_facts, row_hash
+from .storage import read_jsonl
 
 AVAILABILITY = frozenset({"available", "not_available", "blocked", "not_applicable", "ambiguous", "failed"})
 RUN_STATUSES = frozenset({"completed", "failed"})
@@ -39,7 +40,7 @@ def is_valid_orgnr(org: str) -> bool:
 def parse_batch(path: str | Path) -> list[str]:
     path = Path(path)
     if path.suffix == ".jsonl":
-        values = [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
+        values = read_jsonl(path, encoding="utf-8-sig")
     elif path.suffix == ".json":
         data = json.loads(path.read_text(encoding="utf-8-sig"))
         values = data if isinstance(data, list) else data.get("organisation_numbers", [])

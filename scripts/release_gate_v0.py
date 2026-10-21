@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from v0_kernel.storage import read_jsonl
 WEIGHTS = (3, 2, 7, 6, 5, 4, 3, 2)
 
 
@@ -72,7 +74,7 @@ def main() -> None:
                  "--run-id", f"offline-scale-{args.scale}", "--expected-count", str(args.scale),
                  "--fixture-mode", "--checkpoint-every", str(max(150, args.scale // 10))])
         # Fixture mode is mandatory for synthetic data: never imply official authenticity.
-        results = [json.loads(row) for row in out.read_text(encoding="utf-8").splitlines()]
+        results = read_jsonl(out)
         report_data = json.loads(report.read_text(encoding="utf-8"))
         checks = {
             "exact_count": len(results) == args.scale,

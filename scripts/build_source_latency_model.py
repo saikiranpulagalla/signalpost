@@ -5,7 +5,10 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from v0_kernel.storage import read_jsonl_bytes
 
 FAMILIES = ('financials', 'roles', 'locations', 'registry_live', 'group')
 
@@ -54,7 +57,7 @@ def main():
     parser.add_argument('--hard-timeout-seconds',type=float,default=10)
     args=parser.parse_args()
     raw=args.telemetry.read_bytes()
-    result=build_model([json.loads(line) for line in raw.decode('utf-8').splitlines() if line.strip()],args.hard_timeout_seconds)
+    result=build_model(read_jsonl_bytes(raw),args.hard_timeout_seconds)
     result['telemetry_sha256']=hashlib.sha256(raw).hexdigest()
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n',encoding='utf-8')

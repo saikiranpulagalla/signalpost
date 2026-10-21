@@ -6,7 +6,8 @@ Source fixtures and guarded transport are the permanent checked-in test harness.
 """
 import argparse,csv,importlib.util,json,os,re,subprocess,sys,time
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'src'))
+ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));sys.path.insert(0,str(ROOT/'src'))
+from v0_kernel.storage import read_jsonl
 from norway_company_agent.completion import verify_completion
 from norway_company_agent.evaluator_adapter import validate_starter_envelopes
 from norway_company_agent.coverage_benchmark import evaluate
@@ -30,7 +31,7 @@ def main():
     harness=harness.replace("mode=sys.argv[2];lock=", "branches=json.loads(__import__('pathlib').Path(sys.argv.pop(3)).read_text());mode=sys.argv[2];lock=")
     harness=harness.replace("'organisasjonsnummer':'910608193'", "'organisasjonsnummer':branches[org]")
     results=[]
-    read=lambda file:[json.loads(s) for s in file.read_text(encoding='utf-8').splitlines() if s.strip()]
+    read=read_jsonl
     for count in map(int,a.sizes.split(',')):
         identities=f.identities(count);source=out/f'input-{count}';source.mkdir()
         batch=source/'batch.jsonl';bulk=source/'registry.csv'

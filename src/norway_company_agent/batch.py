@@ -11,6 +11,7 @@ from typing import Any, Iterable
 from .evidence import evidence, utc_now
 from .official import accounting_obligation_assessment
 from .sampling import iter_bulk
+from v0_kernel.storage import read_jsonl
 
 
 TERMINAL_STATES = {
@@ -49,15 +50,14 @@ def canonical_organisation_number(value: Any) -> str:
 
 def read_organisation_inputs(path: str | Path) -> list[dict[str, Any]]:
     source = Path(path)
-    text = source.read_text(encoding="utf-8")
     values: list[Any]
     if source.suffix == ".json":
-        body = json.loads(text)
+        body = json.loads(source.read_text(encoding="utf-8"))
         values = body if isinstance(body, list) else body.get("organisation_numbers", [])
     elif source.suffix == ".jsonl":
-        values = [json.loads(line) for line in text.splitlines() if line.strip()]
+        values = read_jsonl(source)
     else:
-        values = [line.strip() for line in text.splitlines() if line.strip()]
+        values = [line.strip() for line in source.read_text(encoding="utf-8").splitlines() if line.strip()]
     records = []
     for value in values:
         org = canonical_organisation_number(value.get("organisation_number") if isinstance(value, dict) else value)

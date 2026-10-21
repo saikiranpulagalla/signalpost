@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 
 def atomic_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -34,5 +35,42 @@ def atomic_json(path: Path, body: dict[str, Any]) -> None:
     atomic_jsonl(path, [body])
 
 
-def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+def _jsonl_values(lines: Iterable[bytes], *, encoding: str, require_object: bool) -> Iterator[Any]:
+    """Decode physical LF records, never Unicode text line boundaries.
+
+    Binary iteration keeps embedded U+2028/U+2029/U+0085 untouched. Remove
+    only LF and its optional CR partner; CR-only framing is unsupported.
+    Blank physical records containing JSON spaces/tabs remain ignored.
+    """
+    if encoding not in {"utf-8", "utf-8-sig"}:
+        raise ValueError("JSONL requires strict UTF-8")
+    for number, raw in enumerate(lines, 1):
+        if raw.endswith(b"\n"):
+            raw = raw[:-1]
+            if raw.endswith(b"\r"):
+                raw = raw[:-1]
+        elif raw.endswith(b"\r"):
+            raise ValueError(f"Unsupported CR-only JSONL terminator at record {number}")
+        text = raw.decode(encoding if number == 1 else "utf-8")
+        if not text.strip(" \t"):
+            continue
+        value = json.loads(text)
+        if require_object and not isinstance(value, dict):
+            raise ValueError(f"JSONL row {number} is not an object")
+        yield value
+
+
+def iter_jsonl(path: str | Path, *, encoding: str = "utf-8", require_object: bool = False) -> Iterator[Any]:
+    """Stream strict UTF-8 JSONL without rewriting bytes or source text."""
+    with Path(path).open("rb") as handle:
+        yield from _jsonl_values(handle, encoding=encoding, require_object=require_object)
+
+
+def read_jsonl(path: str | Path, *, encoding: str = "utf-8", require_object: bool = False) -> list[Any]:
+    return list(iter_jsonl(path, encoding=encoding, require_object=require_object))
+
+
+def read_jsonl_bytes(raw: bytes, *, encoding: str = "utf-8", require_object: bool = False) -> list[Any]:
+    """Parse already pinned bytes without reopening or changing their hash."""
+    with io.BytesIO(raw) as handle:
+        return list(_jsonl_values(handle, encoding=encoding, require_object=require_object))

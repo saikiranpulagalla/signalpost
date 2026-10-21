@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+from v0_kernel.storage import read_jsonl as shared_read_jsonl
 
 from norway_company_agent.crawl_events import merge_profile_events, missing_seed_error_events  # noqa: E402
 from norway_company_agent.identity import apply_website_identity_gate  # noqa: E402
@@ -19,7 +21,7 @@ from norway_company_agent.operations import domain_request_summary, latency_summ
 
 
 def read_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return shared_read_jsonl(path)
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:

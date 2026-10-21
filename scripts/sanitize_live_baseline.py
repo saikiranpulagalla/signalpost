@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from v0_kernel.storage import atomic_json, atomic_jsonl  # noqa: E402
+from v0_kernel.storage import atomic_json, atomic_jsonl, read_jsonl  # noqa: E402
 from scripts.build_profile_viewer import render  # noqa: E402
 
 
@@ -23,7 +23,7 @@ SENSITIVE_FIELDS = {"registered_role", "registered_subunit", "registered_address
 
 
 def read_rows(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return read_jsonl(path)
 
 
 def sanitize_profile(profile: dict) -> dict:

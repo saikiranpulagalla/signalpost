@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from v0_kernel.storage import read_jsonl
 WEIGHTS = (3, 2, 7, 6, 5, 4, 3, 2)
 
 
@@ -73,7 +75,7 @@ def main() -> None:
                       "--fixture-mode", "--output", str(output), "--report", str(report_path),
                       "--run-id", "synthetic-only-release-v1a", "--expected-count", "100")
         data = json.loads(report_path.read_text())
-        rows = [json.loads(line) for line in output.read_text().splitlines()]
+        rows = read_jsonl(output)
         checks = {
             "v0_offline_passed": '"v0_test_suite": "PASS"' in v0.stdout,
             "v1_tests_passed": "OK" in tests.stderr,

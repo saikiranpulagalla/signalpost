@@ -13,7 +13,9 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from v0_kernel.storage import read_jsonl
 from norway_company_agent.admission import admit_wave
 
 
@@ -33,7 +35,7 @@ def main() -> None:
     if not counts or any(value < 1 for value in counts):
         raise SystemExit("Company counts must be positive")
     families = FAMILIES if args.identity_mode == "live_verified" else FAMILIES[1:]
-    rows = [json.loads(line) for line in args.telemetry.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = read_jsonl(args.telemetry)
     durations: dict[str, list[int]] = defaultdict(list)
     for row in rows:
         if row.get("source_family") in FAMILIES and row.get("duration_ms") is not None:

@@ -7,10 +7,12 @@ import html
 import json
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from v0_kernel.storage import read_jsonl
 
 
 def _load(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return read_jsonl(path)
 
 
 def render(profiles: list[dict], *, observation_key: bytes | None = None) -> str:

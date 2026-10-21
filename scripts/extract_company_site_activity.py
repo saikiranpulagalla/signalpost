@@ -4,7 +4,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from v0_kernel.storage import read_jsonl
 
 
 def observation(profile: dict) -> dict | None:
@@ -54,7 +57,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
-    rows = [json.loads(line) for line in Path(args.profiles).read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = read_jsonl(args.profiles)
     observations = [item for profile in rows if (item := observation(profile))]
     Path(args.output).write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in observations), encoding="utf-8")
     report = {

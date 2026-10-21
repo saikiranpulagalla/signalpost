@@ -5,6 +5,7 @@ import time
 import urllib.parse
 from collections import Counter
 from pathlib import Path
+from v0_kernel.storage import read_jsonl
 
 import scrapy
 from bs4 import BeautifulSoup
@@ -97,7 +98,7 @@ class SignalpostWebsiteSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         import json
 
-        rows = [json.loads(line) for line in Path(profiles_path).read_text(encoding="utf-8").splitlines() if line.strip()]
+        rows = read_jsonl(profiles_path)
         allowed = set(organisation_numbers.split(",")) if organisation_numbers else None
         self.profiles = [
             row for row in rows

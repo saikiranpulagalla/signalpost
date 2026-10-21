@@ -14,21 +14,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from norway_company_agent.batch import canonical_organisation_number, profiles_from_bulk  # noqa: E402
 from norway_company_agent.profile_integrity import legacy_pin, validate_metadata, verify_baseline, verify_source_record, verify_claims, verify_receipt, verify_history  # noqa: E402
 from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, validate_starter_envelopes  # noqa: E402
-from v0_kernel.storage import atomic_json, atomic_jsonl  # noqa: E402
+from v0_kernel.storage import atomic_json, atomic_jsonl, read_jsonl as shared_read_jsonl  # noqa: E402
 
 
 def read_jsonl(path: Path) -> list[dict]:
-    rows = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if line.strip():
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{path} has invalid JSONL at line {number}") from exc
-            if not isinstance(value, dict):
-                raise ValueError(f"{path} row {number} is not an object")
-            rows.append(value)
-    return rows
+    return shared_read_jsonl(path, require_object=True)
 
 
 def export(profiles_path: Path, envelopes_path: Path, output_path: Path, report_path: Path | None = None, *, bulk: Path | None = None, source_dir: Path | None = None, key_path: Path | None = None) -> dict:

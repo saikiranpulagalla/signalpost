@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+from v0_kernel.storage import read_jsonl
 
 from norway_company_agent.website import normalize_social_url, structured_social_links  # noqa: E402
 from norway_company_agent.identity import assess_social_identity  # noqa: E402
@@ -18,7 +20,7 @@ def main() -> None:
     parser.add_argument("--input", required=True)
     args = parser.parse_args()
     path = Path(args.input)
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = read_jsonl(path)
     before = after = 0
     for row in rows:
         value = row.get("evidence", {}).get("website", {}).get("value") or {}

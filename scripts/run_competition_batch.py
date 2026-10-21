@@ -32,7 +32,7 @@ from norway_company_agent.live_bootstrap import candidate_profiles, resolve_live
 from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, validate_starter_envelopes  # noqa: E402
 from norway_company_agent.profile_integrity import validate_metadata, verify_baseline, verify_live_baseline, verify_source_record, verify_claims, observation_key, receipt, verify_receipt, verify_history, sign_history  # noqa: E402
 from norway_company_agent.admission import admit_wave, plan_family_admission, latency_forecasts  # noqa: E402
-from v0_kernel.storage import atomic_json, atomic_jsonl  # noqa: E402
+from v0_kernel.storage import atomic_json, atomic_jsonl, read_jsonl, read_jsonl_bytes  # noqa: E402
 
 
 _owned_locks = threading.local()
@@ -571,7 +571,7 @@ def _run(args) -> None:
     resumed_profiles = 0
     profiles_output = Path(args.profiles_output)
     if args.resume and profiles_output.exists():
-        prior = [json.loads(line) for line in profiles_output.read_text(encoding="utf-8").splitlines() if line.strip()]
+        prior = read_jsonl(profiles_output)
         if not set(item["organisation_number"] for item in prior).issubset(set(orgs)):
             raise SystemExit("Resume profile membership is not a subset of this batch")
         current_registry_hashes = {item["organisation_number"]: item["evidence"]["registry"].get("content_sha256") for item in profiles}
@@ -724,7 +724,7 @@ def _run(args) -> None:
             verify_claims(profile)
     if args.previous_profiles:
         from norway_company_agent.refresh import TRACKED_FIELDS, supported_change
-        previous_rows = [json.loads(line) for line in args.previous_profiles.read_text(encoding="utf-8").splitlines() if line.strip()]
+        previous_rows = read_jsonl(args.previous_profiles)
         previous_baselines, _ = profiles_from_bulk(args.previous_bulk, [p["organisation_number"] for p in previous_rows])
         prior_by_org = {p["organisation_number"]: p for p in previous_rows}
         baseline_by_org = {p["organisation_number"]: p for p in previous_baselines}
@@ -851,7 +851,7 @@ def _run(args) -> None:
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if validation["passed"] and not worker_failures:
         envelope_bytes = Path(args.output).read_bytes()
-        committed = [json.loads(line) for line in envelope_bytes.decode("utf-8").splitlines() if line.strip()]
+        committed = read_jsonl_bytes(envelope_bytes)
         if any((item.get("run", {}).get("run_id") if args.output_target == "starter_compatible" else item.get("run_id")) != args.run_id for item in committed):
             raise RuntimeError("Committed envelope run identity mismatch")
         if json.loads(report_path.read_text(encoding="utf-8"))["run_id"] != args.run_id:

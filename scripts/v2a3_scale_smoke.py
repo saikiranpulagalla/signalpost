@@ -14,6 +14,8 @@ from pathlib import Path
 
 WEIGHTS = (3, 2, 7, 6, 5, 4, 3, 2)
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from v0_kernel.storage import read_jsonl
 
 
 def org_for(number: int) -> str | None:
@@ -51,8 +53,8 @@ def run_scale(root: Path, count: int, gzip_bulk: bool) -> dict:
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
     elapsed_ms = int((time.monotonic() - started) * 1000)
     parsed = json.loads(report.read_text(encoding="utf-8")) if report.exists() else None
-    lines = output.read_text(encoding="utf-8").splitlines() if output.exists() else []
-    ordered = [json.loads(line)["organisation_number"] for line in lines] == orgs
+    lines = read_jsonl(output) if output.exists() else []
+    ordered = [line["organisation_number"] for line in lines] == orgs
     return {"count": count, "gzip_bulk": gzip_bulk, "exit_code": result.returncode, "elapsed_ms": elapsed_ms,
             "output_lines": len(lines), "ordered": ordered, "output_bytes": output.stat().st_size if output.exists() else 0,
             "report": parsed, "stderr_tail": result.stderr[-500:]}

@@ -9,16 +9,19 @@ import csv
 import hashlib
 import json
 import subprocess
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from v0_kernel.storage import read_jsonl
 
 
 FAMILIES = ("registry_live", "roles", "locations", "financials", "group")
 
 
 def rows(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return read_jsonl(path)
 
 
 def git_head(root: Path) -> str:

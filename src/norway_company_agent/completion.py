@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from v0_kernel.storage import read_jsonl
 
 
 def verify_completion(*, report: Path, output: Path, profiles: Path, manifest: Path | None = None, candidate: dict | None = None) -> dict:
@@ -14,8 +15,8 @@ def verify_completion(*, report: Path, output: Path, profiles: Path, manifest: P
         if value.get(key) != hashlib.sha256(file.read_bytes()).hexdigest():
             raise ValueError("Transaction artifact hash mismatch: " + key)
     result = json.loads(report.read_text(encoding="utf-8"))
-    rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines() if line.strip()]
-    checkpoints = [json.loads(line) for line in profiles.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = read_jsonl(output)
+    checkpoints = read_jsonl(profiles)
     orgs = [row["organisation_number"] for row in rows]
     if len(set(orgs)) != len(orgs) or orgs != [row["organisation_number"] for row in checkpoints]:
         raise ValueError("Transaction ordered membership mismatch")

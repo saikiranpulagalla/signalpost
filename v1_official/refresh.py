@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .sources import canonical_bytes, endpoint
+from v0_kernel.storage import read_jsonl_bytes
 
 MODULES = ("registry_live", "roles", "locations", "financials")
 MAX_PRIOR_BYTES = 256 * 1024 * 1024
@@ -50,7 +51,7 @@ def load_prior(path: Path, expected_sha: str, orgs: list[str]) -> list[dict[str,
     if hashlib.sha256(raw).hexdigest() != expected_sha:
         raise ValueError("Previous output does not match trusted pinned digest")
     try:
-        rows = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
+        rows = read_jsonl_bytes(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("Malformed pinned previous JSONL") from exc
     prior_ids = [r.get("organisation_number") if isinstance(r, dict) else None for r in rows]
