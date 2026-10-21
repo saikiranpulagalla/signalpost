@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from v0_kernel.storage import read_jsonl
+from v0_kernel.json_codec import dumps as strict_dumps
 
 
 def _load(path: Path) -> list[dict]:
@@ -20,7 +21,7 @@ def render(profiles: list[dict], *, observation_key: bytes | None = None) -> str
     from norway_company_agent.profile_integrity import verify_history
     for profile in profiles:
         verify_history(profile, observation_key)
-    payload = json.dumps(profiles, ensure_ascii=False).replace("<", "\\u003c")
+    payload = strict_dumps(profiles, ensure_ascii=False).replace("<", "\\u003c")
     title = html.escape(f"Signalpost research viewer — {len(profiles)} companies")
     return f"""<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title>
 <style>body{{font:16px system-ui;margin:0;background:#f6f7fb;color:#172033}}header,main{{max-width:1100px;margin:auto;padding:1rem}}input{{width:100%;padding:.8rem;font:inherit;box-sizing:border-box}}article{{background:white;margin:1rem 0;padding:1rem;border-radius:.6rem;box-shadow:0 1px 4px #0002;overflow-wrap:anywhere}}h1,h2,h3{{margin:.2rem 0 .6rem}}.meta,.unknown{{color:#5b6475;font-size:.9em}}.chip{{display:inline-block;padding:.18rem .45rem;border-radius:1rem;background:#e8eefc;margin:.15rem}}details{{margin:.6rem 0}}a{{color:#0759b5;overflow-wrap:anywhere}}ul{{padding-left:1.2rem}}table{{display:block;overflow-x:auto;width:100%}}th,td{{text-align:left;padding:.4rem}}</style>

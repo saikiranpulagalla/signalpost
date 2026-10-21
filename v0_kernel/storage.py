@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from .json_codec import loads as strict_loads, dumps as strict_dumps
 import io
 import os
 import tempfile
@@ -15,7 +16,7 @@ def atomic_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             for row in rows:
-                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+                handle.write(strict_dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
@@ -54,7 +55,7 @@ def _jsonl_values(lines: Iterable[bytes], *, encoding: str, require_object: bool
         text = raw.decode(encoding if number == 1 else "utf-8")
         if not text.strip(" \t"):
             continue
-        value = json.loads(text)
+        value = strict_loads(text)
         if require_object and not isinstance(value, dict):
             raise ValueError(f"JSONL row {number} is not an object")
         yield value

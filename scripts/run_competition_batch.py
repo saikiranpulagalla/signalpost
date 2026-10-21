@@ -33,6 +33,7 @@ from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, vali
 from norway_company_agent.profile_integrity import validate_metadata, verify_baseline, verify_live_baseline, verify_source_record, verify_claims, observation_key, receipt, verify_receipt, verify_history, sign_history  # noqa: E402
 from norway_company_agent.admission import admit_wave, plan_family_admission, latency_forecasts, admitted_modules_by_org  # noqa: E402
 from v0_kernel.storage import atomic_json, atomic_jsonl, read_jsonl, read_jsonl_bytes  # noqa: E402
+from v0_kernel.json_codec import loads as strict_loads, dumps as strict_dumps  # noqa: E402
 
 
 _owned_locks = threading.local()
@@ -458,6 +459,8 @@ def _run(args) -> None:
             fetch_exception = None
         if fetch_exception is not None:
             raise fetch_exception
+        if result.error == "StrictJSONError":
+            raise ValueError("Non-finite source JSON; not a recoverable transport outcome")
         # Fresh successful transports must agree with their original bytes
         # BEFORE normalization or signing a retained observation. Completion
         # policy controls optional source failures, never evidence integrity.
@@ -466,8 +469,9 @@ def _run(args) -> None:
         if result.status == 200 and not result.error:
             if (not result.body_complete or result.raw_bytes is None or
                     hashlib.sha256(result.raw_bytes).hexdigest() != result.content_sha256 or
-                    len(result.raw_bytes) != result.bytes_received or json.loads(result.raw_bytes) != result.body):
+                    len(result.raw_bytes) != result.bytes_received or strict_loads(result.raw_bytes) != result.body):
                 raise ValueError("Source byte/projection integrity failure; not a recoverable transport outcome")
+            strict_dumps(result.body)  # Also reject injected non-finite projections.
         if args.live_bootstrap:
             snapshots.retain(url=url, content_sha256=result.content_sha256, raw_bytes=result.raw_bytes,
                              metadata={"run_id": args.run_id, "http_status": result.status,
@@ -845,7 +849,7 @@ def _run(args) -> None:
             from scripts.build_profile_viewer import render
             args.viewer_output.parent.mkdir(parents=True, exist_ok=True)
             args.viewer_output.write_text(render(ordered_profiles, observation_key=private_key), encoding="utf-8")
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(strict_dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if validation["passed"] and not worker_failures:
         envelope_bytes = Path(args.output).read_bytes()
         committed = read_jsonl_bytes(envelope_bytes)

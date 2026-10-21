@@ -13,6 +13,7 @@ from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from .network_policy import NetworkPolicy, parse_policy, public_brreg_url
+from v0_kernel.json_codec import loads as strict_loads
 
 
 @dataclass
@@ -150,7 +151,7 @@ def fetch_json(url: str, *, timeout: float = 20.0, attempts: int = 3,
                             complete = True
                             break
                     if not error:
-                        body = json.loads(bytes(progress["raw"]))
+                        body = strict_loads(bytes(progress["raw"]))
                     if time.monotonic() >= expires:
                         raise TimeoutError()
                 finally:
