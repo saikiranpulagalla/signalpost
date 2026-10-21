@@ -55,12 +55,15 @@ def build_synthesis(result: dict, changes=()) -> dict:
         if not cs or period(cs[0])[1]!=latest: continue
         c=cs[0];v=c["value"];a,b=period(c)
         scale=f", unit {v['unit']}" if v.get("unit") else ", source amount; scale not separately specified"
-        add("Financial position", f"{label}: {v['amount']:g} {v['currency']}{scale}; {a} to {b} (SELSKAP, exact legal entity).", [c])
+        # str(int) is exact; str(float) round-trips the existing value without
+        # inventing decimal precision or silently reducing it to six digits.
+        add("Financial position", f"{label}: {v['amount']} {v['currency']}{scale}; {a} to {b} (SELSKAP, exact legal entity).", [c])
         # Compare only explicitly stated compatible units and consecutive calendar years.
         if len(cs)>1 and v.get("unit"):
             old=cs[1];ov=old["value"];pa,pb=period(old)
             if (a.month,a.day,b.month,b.day)==(1,1,12,31) and (pa.month,pa.day,pb.month,pb.day)==(1,1,12,31) and a.year==b.year==pb.year+1 and pa.year==pb.year and (ov.get("currency"),ov.get("unit"),old.get("scope"),ov.get("account_type"))==(v["currency"],v["unit"],c["scope"],v["account_type"]):
-                add("Financial comparison", f"{label} source-amount difference from {pb.year}: {v['amount']-ov['amount']:g} {v['currency']} ({v['unit']}); no inference about company health.", [old,c])
+                approximation = "approximately " if isinstance(v['amount'], float) or isinstance(ov['amount'], float) else ""
+                add("Financial comparison", f"{label} source-amount difference from {pb.year}: {approximation}{v['amount']-ov['amount']} {v['currency']} ({v['unit']}); no inference about company health.", [old,c])
     for c in fields.get("registered_subunit",[])[:2]:
         v=c["value"];address=v.get("address") or {}
         add("Business and locations", f"Registered subunit: {v.get('name') or v['organisation_number']} ({v['organisation_number']})" +
