@@ -52,10 +52,13 @@ do not impose that requirement.
 Missing official frozen identities, wrong source/parent attribution, corrupted
 source bytes/digests/projections, invalid metadata, fabricated persisted claims,
 normalization/validation exceptions and arbitrary worker failures stay fatal.
-Successful source results in best-effort mode must have matching original bytes,
+Successful fresh source results in both policies must have matching original bytes,
 digest, byte count and decoded body. Baseline and claim integrity are checked
 before adaptation. A fatal worker failure prevents new public JSONL publication
 and completed-manifest creation in best-effort mode.
+
+The policy-independent fresh-source integrity repair and its V2/V3 reproduction
+are documented in [Source integrity consistency](SOURCE_INTEGRITY_CONSISTENCY.md).
 
 Only an exception at the isolated transport-call boundary **after an accounted
 request start**, returning no source observation, can become an ordinary failed

@@ -461,7 +461,12 @@ def _run(args) -> None:
             fetch_exception = None
         if fetch_exception is not None:
             raise fetch_exception
-        if args.optional_research_policy == "best_effort" and result.status == 200 and not result.error:
+        # Fresh successful transports must agree with their original bytes
+        # BEFORE normalization or signing a retained observation. Completion
+        # policy controls optional source failures, never evidence integrity.
+        # Persisted legacy observations use the separate receipt/pin/source
+        # verification path; no missing historical bytes are invented here.
+        if result.status == 200 and not result.error:
             if (not result.body_complete or result.raw_bytes is None or
                     hashlib.sha256(result.raw_bytes).hexdigest() != result.content_sha256 or
                     len(result.raw_bytes) != result.bytes_received or json.loads(result.raw_bytes) != result.body):

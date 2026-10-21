@@ -19,7 +19,7 @@ ORG = "923609016"
 OTHER = "993578843"
 
 HARNESS = r'''
-import importlib.util, sys
+import importlib.util, sys, json, hashlib
 from pathlib import Path
 spec=importlib.util.spec_from_file_location("live_runner",sys.argv[1]); runner=importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
 from norway_company_agent.http import FetchResult
@@ -30,9 +30,11 @@ def fetch(url, timeout=20.0, attempts=1, allow_redirects=True, policy=None):
     assert str(policy) in ("authorized_public_brreg", "NetworkPolicy.AUTHORIZED_PUBLIC_BRREG")
     if url.endswith("/enheter/"+org):
         body={"organisasjonsnummer": ("993578843" if scenario == "wrong" else org), "navn":"Live Example AS", "organisasjonsform":{"kode":"AS"}, "naeringskode1":{"kode":"62.010","beskrivelse":"Programming"}}
-        return FetchResult(url,200,1,2,body=body,content_sha256="a"*64,retrieved_at="2026-10-12T00:00:00Z")
+        raw=json.dumps(body).encode()
+        return FetchResult(url,200,1,len(raw),body=body,raw_bytes=raw,content_sha256=hashlib.sha256(raw).hexdigest(),retrieved_at="2026-10-12T00:00:00Z")
     if url.endswith("/roller"):
-        return FetchResult(url,200,1,2,body={"rollegrupper":[]},content_sha256="b"*64,retrieved_at="2026-10-12T00:00:01Z")
+        body={"rollegrupper":[]};raw=json.dumps(body).encode()
+        return FetchResult(url,200,1,len(raw),body=body,raw_bytes=raw,content_sha256=hashlib.sha256(raw).hexdigest(),retrieved_at="2026-10-12T00:00:01Z")
     raise AssertionError("unexpected downstream URL "+url)
 runner.fetch_json=fetch
 sys.argv=[sys.argv[1],"--organisations",batch,"--live-bootstrap","--confirm-authorized-live-sources","--network-policy","authorized_public_brreg","--output",out,"--profiles-output",profiles,"--report",report,"--run-id","live-test","--modules","registry,accounting_obligation,registry_live,roles","--workers","1","--max-source-requests","2","--source-attempts","1","--output-target","starter_compatible"]
