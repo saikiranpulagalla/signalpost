@@ -39,7 +39,8 @@ def _evidence_id(org: str, field: str, record: dict[str, Any]) -> str:
     return "ev-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
-def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes | None = None) -> dict[str, Any]:
+def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes | None = None,
+                            unattempted_optional_sources: set[str] | frozenset[str] = frozenset()) -> dict[str, Any]:
     """Produce only fields documented by this repository's starter contract.
 
     This is deliberately *starter_compatible*, not a certification of
@@ -108,7 +109,25 @@ def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes 
             claims.append({"field": claim.get("field"), "value": value, "availability": "available",
                            "confidence": 1.0, "evidence_ids": refs})
     errors = []
+    permitted = {"financials", "financial_history", "roles", "locations", "group", "registry_live"}
+    if set(unattempted_optional_sources) - permitted:
+        raise ValueError("Mandatory identity/integrity cannot use optional research degradation")
+    unattempted = set()
     for field, record in sorted(source_records.items()):
+        if isinstance(record, dict) and record.get("status") == "not_fetched" and field in unattempted_optional_sources:
+            if (source_records.get("registry", {}).get("status") != "available" or record.get("value") is not None or
+                    record.get("note") not in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "source service cooldown", "transport service stopped"} or
+                    any(field in c.get("evidence_fields", []) for c in research.get("claims", []))):
+                raise ValueError("Unsafe unattempted optional source diagnostic")
+            # This is an execution error, NOT a seventh public availability.
+            # Preserve admission and non-attempt; never call it absent, failed,
+            # ambiguous, or retrospectively not scheduled.
+            errors.append(json.dumps({"source_family": field,
+                "execution_diagnostic": "Admitted optional research was not attempted; no checked absence or source-failure finding",
+                "selected": True, "attempted": False, "note": record.get("note"),
+                "source_url": record.get("source_url"), "decision_at": record.get("retrieved_at")}, sort_keys=True))
+            unattempted.add(field)
+            continue
         if isinstance(record, dict) and record.get("status") != "available":
             errors.append(f"{field}: {starter_availability(str(record.get('status')))}")
             errors.append(json.dumps({"source_family": field, "source_outcome": starter_availability(str(record.get("status"))),
@@ -127,7 +146,9 @@ def adapt_terminal_envelope(envelope: dict[str, Any], *, observation_key: bytes 
     return {
         "organisation_number": org,
         "run": {"run_id": envelope.get("run_id"), "started_at": started, "completed_at": completed,
-                "terminal_status": "failed" if envelope.get("state") == "submission_error" else "completed"},
+                "terminal_status": "failed" if envelope.get("state") == "submission_error" and not (
+                    unattempted and all(state.get("state") != "submission_error" or field in unattempted
+                                        for field, state in envelope.get("modules", {}).items())) else "completed"},
         "claims": claims, "evidence": evidence_rows, "changes": profile.get("changes", []) if isinstance(profile.get("changes"), list) else [],
         "errors": errors,
         "operations": {"requests": int(metric.get("requests") or 0), "runtime_ms": runtime_ms, "third_party_cost_usd": 0},

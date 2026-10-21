@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import inspect
 import json
@@ -141,6 +142,8 @@ def main() -> None:
     parser.add_argument("--viewer-output", type=Path, help="Generate the verification viewer from this run's profiles")
     parser.add_argument("--evidence-cutoff-policy", type=Path, help="Reserved organizer-supplied policy; rejected until semantics are supported")
     parser.add_argument("--modules", default="registry,accounting_obligation")
+    parser.add_argument("--optional-research-policy", choices=("strict", "best_effort"), default="strict",
+                        help="Opt-in terminal baseline publication with explicit unattempted optional-work diagnostics; integrity failures remain fatal")
     parser.add_argument("--output-target", choices=("internal_v2", "starter_compatible"), default="internal_v2")
     args = parser.parse_args()
     args.execution_started = execution_started
@@ -279,6 +282,8 @@ def _run(args) -> None:
     else:
         profiles, registry_metadata = profiles_from_bulk(args.bulk, orgs)
         registry_metadata["identity_mode"] = "frozen_replay"
+        if args.optional_research_policy == "best_effort" and registry_metadata.get("missing"):
+            raise SystemExit("Best-effort optional research cannot recover missing official frozen identities")
     annotations = {item["organisation_number"]: item for item in organisation_inputs}
     for profile in profiles:
         for key in ("evaluation_split", "sample_slice"):
@@ -346,7 +351,9 @@ def _run(args) -> None:
             "expected_seconds_by_family": expected_seconds,
             "allocation_policy": args.source_allocation_policy,
         },
-        "policy": "zero source-family budget is an intentional pre-run omission; nonzero selected work must finish or fail closed",
+        "policy": ("best_effort optional research; admitted but unattempted work remains not_fetched in profiles and explicit terminal errors; verified baseline and publication integrity are mandatory"
+                   if args.optional_research_policy == "best_effort" else
+                   "zero source-family budget is an intentional pre-run omission; nonzero selected work must finish or fail closed"),
     }
     execution_plan_sha256 = hashlib.sha256(
         json.dumps(execution_plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -443,8 +450,22 @@ def _run(args) -> None:
             if ledger is not None:
                 ledger["bytes"] += result.bytes_received
                 ledger["latencies_ms"].append(result.elapsed_ms)
+        # Only errors at the isolated transport call, after an accounted start,
+        # may be ordinary source failures. Never swallow parser/validation errors
+        # or failures before request admission. No source result/claim survives
+        # this path; the attempted operation receives a truthful failed outcome.
+        if (fetch_exception is not None and args.optional_research_policy == "best_effort"
+                and physical_request_number is not None and not args.live_bootstrap
+                and isinstance(fetch_exception, (OSError, RuntimeError))
+                and not isinstance(fetch_exception, (ValueError, TypeError))):
+            fetch_exception = None
         if fetch_exception is not None:
             raise fetch_exception
+        if args.optional_research_policy == "best_effort" and result.status == 200 and not result.error:
+            if (not result.body_complete or result.raw_bytes is None or
+                    hashlib.sha256(result.raw_bytes).hexdigest() != result.content_sha256 or
+                    len(result.raw_bytes) != result.bytes_received or json.loads(result.raw_bytes) != result.body):
+                raise ValueError("Source byte/projection integrity failure; not a recoverable transport outcome")
         if args.live_bootstrap:
             snapshots.retain(url=url, content_sha256=result.content_sha256, raw_bytes=result.raw_bytes,
                              metadata={"run_id": args.run_id, "http_status": result.status,
@@ -501,6 +522,14 @@ def _run(args) -> None:
                                                       fetcher=bounded_fetch)
         if not isinstance(records, dict) or set(records) - set(modules) or any(not isinstance(value, dict) for value in records.values()):
             raise ValueError("Malformed or unexpected worker evidence keys")
+        if args.optional_research_policy == "best_effort":
+            for record in records.values():
+                value = record.get("value") or {}
+                rejections = value.get("rejected_records", []) if isinstance(value, dict) else []
+                reasons = [r.get("reason") if isinstance(r, dict) else r for r in rejections]
+                if ("conflicts with requested identity" in str(record.get("note")) or
+                        any(reason in {"organisation_number_mismatch", "missing_or_invalid_organisation_number", "parent_identity_mismatch", "invalid_or_missing_identity"} for reason in reasons)):
+                    raise ValueError("Source identity integrity failure; not recoverable optional research")
         profile["evidence"].update(records)
         for field in records:
             if records[field].get("status") != "not_fetched":
@@ -601,7 +630,8 @@ def _run(args) -> None:
             return
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             futures = {
-                pool.submit(enrich, profile, modules_for(profile), resolve_identity=identity): profile
+                pool.submit(enrich, copy.deepcopy(profile) if args.optional_research_policy == "best_effort" else profile,
+                            modules_for(profile), resolve_identity=identity): profile
                 for profile in candidates
             }
             for index, future in enumerate(as_completed(futures), 1):
@@ -631,6 +661,10 @@ def _run(args) -> None:
             save_profile(profile, {"requests": 0, "bytes": 0, "latencies_ms": []})
         if pending_profiles:
             checkpoint()
+
+    if args.optional_research_policy == "best_effort" and any(
+            profile["evidence"].get("registry", {}).get("status") != "available" for profile in state.values()):
+        raise ValueError("Best-effort optional research requires every authoritative legal identity")
 
     for org, profile in state.items():
         if profile["evidence"].get("registry", {}).get("status") == "available":
@@ -672,6 +706,17 @@ def _run(args) -> None:
                   "bytes": sum(p.get("run_metrics", {}).get("bytes", 0) for p in state.values()),
                   "latencies_ms": [value for p in state.values() for value in p.get("run_metrics", {}).get("latencies_ms", [])]}
     ordered_profiles = [attach_research_result(state[org]) for org in orgs]
+    if args.optional_research_policy == "best_effort":
+        # All executor contexts have joined; validate detached observations before
+        # any graceful-publication exception. No in-flight profile mutator remains.
+        current_by_org = {p["organisation_number"]: p for p in profiles}
+        for profile in ordered_profiles:
+            validate_metadata(profile)
+            if args.live_bootstrap:
+                verify_live_baseline(profile, private_key)
+            else:
+                verify_baseline(profile, current_by_org[profile["organisation_number"]])
+            verify_claims(profile)
     if args.previous_profiles:
         from norway_company_agent.refresh import TRACKED_FIELDS, supported_change
         previous_rows = [json.loads(line) for line in args.previous_profiles.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -725,11 +770,16 @@ def _run(args) -> None:
         for profile in ordered_profiles
     ]
     validation = validate_envelopes(envelopes, orgs)
+    if args.optional_research_policy == "best_effort" and worker_failures:
+        validation = {**validation, "passed": False,
+                      "fatal_worker_errors": "Normalization/integrity worker failures are not graceful source outcomes"}
     publication_envelopes = envelopes
     output_validation = validation
     if args.output_target == "starter_compatible" and validation["passed"]:
         try:
-            publication_envelopes = [adapt_terminal_envelope(item, observation_key=private_key) for item in envelopes]
+            publication_envelopes = [adapt_terminal_envelope(item, observation_key=private_key,
+                unattempted_optional_sources=(set(admitted_by_org[item["organisation_number"]])
+                    if args.optional_research_policy == "best_effort" else frozenset())) for item in envelopes]
             output_validation = validate_starter_envelopes(publication_envelopes, orgs)
         except ValueError as exc:
             # The starter contract does not define a semantic equivalent for
@@ -772,6 +822,14 @@ def _run(args) -> None:
         "source_snapshots": {"directory": str(args.source_snapshots_dir) if args.source_snapshots_dir else None,
                              "byte_cap": args.source_snapshot_byte_cap, **snapshots.metrics},
         "worker_failures": worker_failures,
+        **({"optional_research": {
+            "policy": "best_effort",
+            "internal_source_state_counts": {status: sum(
+                p.get("evidence", {}).get(module, {}).get("status") == status
+                for p in ordered_profiles for module in admitted_by_org[p["organisation_number"]])
+                for status in ("available", "not_found", "blocked", "source_error", "not_fetched")},
+            "note": "All profile workers joined; not_fetched stays selected/unattempted, not absence or an official availability state",
+        }} if args.optional_research_policy == "best_effort" else {}),
         "validation": validation,
     }
     # A semantically invalid evaluator envelope must never cross the terminal
