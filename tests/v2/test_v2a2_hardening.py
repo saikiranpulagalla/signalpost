@@ -115,19 +115,34 @@ class V2A2Hardening(unittest.TestCase):
         self.assertEqual(result["source_request_policy"]["source_requests_started"], 0)
         self.assertEqual(result["operations"]["requests"], 0)
         profile = json.loads(profiles.read_text(encoding="utf-8").splitlines()[0])
-        self.assertEqual(profile["evidence"]["roles"]["status"], "not_fetched")
+        self.assertNotIn("roles", profile["evidence"])
+        self.assertEqual(result["execution_plan"]["admission"]["admitted_organisations"]["roles"], [])
 
     def test_unattempted_source_fails_closed_for_starter_target(self):
+        # Global zero is now an intentional omission. Exercise the original
+        # invariant with genuinely admitted work stopped before transport starts.
+        harness = '''
+import importlib.util,sys,socket,urllib.request
+def forbidden(*a,**k):raise AssertionError('SOURCE NETWORK FORBIDDEN')
+socket.socket.connect=forbidden;socket.create_connection=forbidden;urllib.request.OpenerDirector.open=forbidden
+spec=importlib.util.spec_from_file_location('runner',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+from norway_company_agent.http import FetchResult
+def stopped(url,*,on_request_start=None,**options):
+ assert callable(on_request_start)
+ return FetchResult(url,0,0,0,error='transport service stopped',request_started=False,retrieved_at='2026-10-20T00:00:00Z')
+r.fetch_json=stopped;sys.argv=sys.argv[1:];r.main()
+'''
         batch, bulk = self.root / "starter-budget-batch.txt", self.root / "starter-budget-bulk.csv"
         batch.write_text(ORG + "\n", encoding="utf-8")
         self._write_bulk(bulk)
         output, profiles, report = (self.root / "starter-budget-envelopes.jsonl", self.root / "starter-budget-profiles.jsonl", self.root / "starter-budget-report.json")
         process = subprocess.run([
-            sys.executable, "-S", "scripts/run_competition_batch.py", "--organisations", str(batch),
+            sys.executable, "-S", "-c", harness, str(ROOT / "scripts/run_competition_batch.py"), "--organisations", str(batch),
             "--bulk", str(bulk), "--profiles-output", str(profiles), "--output", str(output),
             "--report", str(report), "--run-id", "starter-budget-zero", "--expected-count", "1",
             "--modules", "registry,accounting_obligation,roles", "--workers", "1",
-            "--max-source-requests", "0", "--source-attempts", "1", "--source-timeout-seconds", "1",
+            "--max-source-requests", "1", "--source-attempts", "1", "--source-timeout-seconds", "1",
+            "--network-policy", "authorized_public_brreg", "--confirm-authorized-live-sources",
             "--output-target", "starter_compatible",
         ], cwd=ROOT, text=True, capture_output=True)
         self.assertNotEqual(process.returncode, 0)
@@ -136,14 +151,16 @@ class V2A2Hardening(unittest.TestCase):
         self.assertFalse(result["validation"]["starter_compatible"]["passed"])
         self.assertIn("not_fetched", result["validation"]["starter_compatible"]["errors"][0])
         self.assertFalse(output.exists(), "unattempted source must not be published as a starter envelope")
+        self.assertEqual(result["execution_plan"]["admission"]["admitted_organisations"]["roles"], [ORG])
+        self.assertEqual(result["source_request_policy"]["source_requests_started"], 0)
 
     def test_intentionally_omitted_family_is_absent_and_starter_publishable(self):
         """A zero pre-run family allocation is not a checked-source result.
 
         The local starter contract has no availability value for intentionally
         unscheduled research, so this uses the documented omission boundary.
-        It is distinct from the zero global budget case above, which selected
-        a role lookup and then failed to start it.
+        A zero global budget is also a pre-run omission. The stopped-transport
+        case above instead selects a role lookup and then cannot start it.
         """
         batch, bulk = self.root / "omitted-batch.txt", self.root / "omitted-bulk.csv"
         batch.write_text(ORG + "\n", encoding="utf-8")
