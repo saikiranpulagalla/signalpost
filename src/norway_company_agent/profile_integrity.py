@@ -102,7 +102,9 @@ def verify_live_baseline(profile: dict, key: bytes) -> None:
     if not verify_receipt(profile, "registry", key):
         raise ValueError("Unverifiable retained live identity")
     normalized = normalize_entity(profile["evidence"]["registry"]["value"], declarations=
-        profile["evidence"]["registry_live"].get("value", {}).get("declaration_projection_version") == 1)
+        profile["evidence"]["registry_live"].get("value", {}).get("declaration_projection_version") == 1,
+        history=profile["evidence"]["registry_live"].get("value", {}).get("name_history_projection_version") == 1,
+        observed_at=profile["evidence"]["registry_live"].get("retrieved_at"))
     if normalized.get("organisation_number") != profile["organisation_number"]:
         raise ValueError("Retained live identity attribution mismatch")
     from .live_bootstrap import live_registry_projection
@@ -144,7 +146,9 @@ def verify_source_record(profile: dict, field: str, source_dir: Path | None) -> 
             raise ValueError("Role source identity mismatch")
         expected = normalize_roles(body)
     elif field == "registry_live":
-        expected = normalize_entity(body, declarations=record.get("value", {}).get("declaration_projection_version") == 1)
+        expected = normalize_entity(body, declarations=record.get("value", {}).get("declaration_projection_version") == 1,
+            history=record.get("value", {}).get("name_history_projection_version") == 1,
+            observed_at=record.get("retrieved_at"))
         if expected.get("organisation_number") != org:
             raise ValueError("Live identity source mismatch")
     else:

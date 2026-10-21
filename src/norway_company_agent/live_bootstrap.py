@@ -63,7 +63,7 @@ def resolve_live_identity(profile: dict[str, Any], fetcher: Callable[[str], Fetc
     result = fetcher(BRREG_ENTITY.format(org=org))
     source_url = result.url or BRREG_ENTITY.format(org=org)
     if result.status == 200 and not result.error:
-        normalized = normalize_entity(result.body, declarations=True)
+        normalized = normalize_entity(result.body, declarations=True, history=True, observed_at=result.retrieved_at)
         if normalized.get("organisation_number") != org:
             record = evidence("registry", "source_error", "official_registry_live", source_url,
                               value=None, note="Live identity response organisation number does not match request",
@@ -87,6 +87,8 @@ def resolve_live_identity(profile: dict[str, Any], fetcher: Callable[[str], Fetc
         profile["evidence"]["accounting_obligation"] = accounting_obligation_assessment(profile)
         if normalized.get("declaration_projection_version") == 1:
             profile["evidence"]["registry_live"]["extraction_method"]["version"] = "signalpost-live-declarations/2026-10-20"
+        if normalized.get("name_history_projection_version") == 1:
+            profile["evidence"]["registry_live"]["extraction_method"]["version"] = "signalpost-registry-history/2026-10-20"
         return profile, result, True
     status = "not_fetched" if result.error in {"source request budget exhausted", "source family budget exhausted", "execution deadline reserve reached", "network policy offline", "network policy rejected URL", "source service cooldown", "transport service stopped"} else "not_found" if result.status in {404, 410} else "blocked" if result.status in {401, 403} else "source_error"
     note = result.error or ("Live entity was not found" if status == "not_found" else "Live identity request failed")

@@ -5,7 +5,7 @@ import json
 import re
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable
 
 from .evidence import evidence
@@ -282,7 +282,48 @@ def normalize_group(body: Any, org: str) -> dict[str, Any]:
     return {"relations": relations}
 
 
-def normalize_entity(body: Any, *, declarations: bool = False) -> dict[str, Any]:
+def registered_name_history(body: dict[str, Any], observed_at: str | None) -> list[dict[str, str]]:
+    """Literal former-name intervals, not observed changes or current aliases.
+
+    The retained public representation uses unzoned wall-clock timestamps.
+    Preserve those strings; do not invent UTC/effective-time semantics. Withhold
+    missing, invalid, conflicting or not-demonstrably-past intervals. In
+    particular an end on the observation's UTC calendar date is conservative
+    unknown because the source interval has no timezone.
+    """
+    from .batch import canonical_organisation_number
+    try:
+        org = canonical_organisation_number(body.get("organisasjonsnummer"))
+        observed = datetime.fromisoformat((observed_at or "").replace("Z", "+00:00"))
+        if observed.utcoffset() is None:
+            return []
+    except (ValueError, TypeError):
+        return []
+    rows = body.get("historiskeNavn")
+    if not isinstance(rows, list) or len(rows) > 1000:
+        return []
+    values: dict[tuple[str, str, str], dict[str, str]] = {}
+    for row in rows:
+        if not isinstance(row, dict) or row.get("organisasjonsnummer", org) != org:
+            continue
+        name, start, end = row.get("navn"), row.get("fraDato"), row.get("tilDato")
+        if not isinstance(name, str) or not name.strip() or len(name.encode("utf-8")) > 4096:
+            continue
+        if not all(isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", v) for v in (start, end)):
+            continue
+        try:
+            a, b = datetime.fromisoformat(start), datetime.fromisoformat(end)
+            if a >= b or b.date() >= observed.date():
+                continue
+        except ValueError:
+            continue
+        values[(start, end, name)] = {"name": name, "valid_from": start, "valid_to": end,
+                                     "time_basis": "source wall-clock timestamps; timezone not supplied"}
+    return [values[key] for key in sorted(values)]
+
+
+def normalize_entity(body: Any, *, declarations: bool = False, history: bool = False,
+                     observed_at: str | None = None) -> dict[str, Any]:
     body = body if isinstance(body, dict) else {}
     result = {
         "organisation_number": body.get("organisasjonsnummer"),
@@ -307,6 +348,11 @@ def normalize_entity(body: Any, *, declarations: bool = False) -> dict[str, Any]
             if value is not None and len(json.dumps(value, ensure_ascii=False).encode("utf-8")) <= 1_000_000:
                 result[field] = list(dict.fromkeys(value)) if isinstance(value, list) else value
                 result["declaration_projection_version"] = 1
+    if history:
+        names = registered_name_history(body, observed_at)
+        if names:
+            result["registered_name_history"] = names
+            result["name_history_projection_version"] = 1
     return result
 
 
@@ -355,10 +401,12 @@ def fetch_official_modules(org: str, modules: set[str], fetcher: Callable[[str],
                 content_sha256=result.content_sha256, retrieved_at=result.retrieved_at, source_row_key=org)
             continue
         if result.status == 200 and not result.error:
-            normalized = normalize_entity(result.body, declarations=True) if module == "registry_live" else normalize_financials(result.body, org) if module == "financials" else normalize_financial_history(result.body, org) if module == "financial_history" else normalize_roles(result.body) if module == "roles" else normalize_locations(result.body, org) if module == "locations" else normalize_group(result.body, org) if module == "group" else result.body
+            normalized = normalize_entity(result.body, declarations=True, history=True, observed_at=result.retrieved_at) if module == "registry_live" else normalize_financials(result.body, org) if module == "financials" else normalize_financial_history(result.body, org) if module == "financial_history" else normalize_roles(result.body) if module == "roles" else normalize_locations(result.body, org) if module == "locations" else normalize_group(result.body, org) if module == "group" else result.body
         records[module] = _classified(module, source_type, result, value=normalized, org=org)
         if module == "registry_live" and isinstance(normalized, dict) and normalized.get("declaration_projection_version") == 1:
             records[module]["extraction_method"]["version"] = "signalpost-live-declarations/2026-10-20"
+        if module == "registry_live" and isinstance(normalized, dict) and normalized.get("name_history_projection_version") == 1:
+            records[module]["extraction_method"]["version"] = "signalpost-registry-history/2026-10-20"
         records[module]["http_status"] = result.status or None
         if module == "locations" and isinstance(normalized, dict):
             records[module]["completeness"] = "complete" if normalized["complete"] else "partial"

@@ -29,6 +29,9 @@ def build_synthesis(result: dict, changes=()) -> dict:
                 value = " / ".join(value)
             if isinstance(value, str) and value.strip():
                 add("Registered business declarations", f"{label}: {value}. This is a registry declaration, not verification of actual operations.", [c])
+    for c in fields.get("registered_name_history", [])[:1]:
+        for item in c["value"][:3]:
+            add("Registered name history", f"Registered former legal name: {item['name']} (source interval {item['valid_from']} to {item['valid_to']}; timezone not supplied). This is a historical registry record, not the current legal name or a newly observed change.", [c])
     roles = [c for c in fields.get("registered_role", []) if isinstance(c["value"], dict) and not c["value"].get("inactive")]
     for c in roles[:3]:
         v=c["value"]

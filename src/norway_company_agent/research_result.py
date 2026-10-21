@@ -70,6 +70,11 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
     live = _available(profile, "registry_live")
     if live and isinstance(live.get("value"), dict):
         value = live["value"]
+        if value.get("name_history_projection_version") == 1 and value.get("registered_name_history"):
+            # One structured family claim per company, not one alias per name.
+            claims.append(_claim(org, "registered_name_history", value["registered_name_history"], "registry_live", live, locator={
+                "representation": "registered former-name intervals; sorted and deduplicated, not current names or newly observed changes",
+                "pointer": "/historiskeNavn"}))
         for field, item in (("registered_address", value.get("business_address") or value.get("postal_address")),
                             ("registered_website", value.get("website")),
                             ("registered_legal_status", {key: value[key] for key in ("bankrupt", "liquidating") if isinstance(value.get(key), bool)})):
@@ -109,6 +114,8 @@ def build_research_result(profile: dict[str, Any]) -> dict[str, Any]:
     version = 3 if any(c["field"] in {"registered_activity", "registered_purpose"} for c in claims) else 2
     if live and (live.get("value") or {}).get("declaration_projection_version") == 1:
         version = 4
+    if live and (live.get("value") or {}).get("name_history_projection_version") == 1:
+        version = 5
     return {"schema": "signalpost.internal.research-result/v1", "normalization_version": version, "organisation_number": org,
             "claims": claims, "availability": availability}
 
