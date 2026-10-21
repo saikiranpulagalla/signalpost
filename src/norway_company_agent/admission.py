@@ -3,6 +3,13 @@ from __future__ import annotations
 import math
 
 
+def admitted_modules_by_org(orgs: list[str], admitted: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Invert the unchanged plan with one membership set per module."""
+    memberships = {module: set(values) for module, values in admitted.items()}
+    return {org: sorted(module for module, values in memberships.items() if org in values)
+            for org in orgs}
+
+
 def latency_forecasts(value: dict, hard_timeout: float) -> dict[str, float]:
     """Read measured conditional forecasts, retaining the legacy flat format."""
     if value.get("schema") == "signalpost.admission-latencies/v1":

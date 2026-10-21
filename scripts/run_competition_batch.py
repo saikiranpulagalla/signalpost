@@ -31,7 +31,7 @@ from norway_company_agent.research_result import attach_research_result  # noqa:
 from norway_company_agent.live_bootstrap import candidate_profiles, resolve_live_identity  # noqa: E402
 from norway_company_agent.evaluator_adapter import adapt_terminal_envelope, validate_starter_envelopes  # noqa: E402
 from norway_company_agent.profile_integrity import validate_metadata, verify_baseline, verify_live_baseline, verify_source_record, verify_claims, observation_key, receipt, verify_receipt, verify_history, sign_history  # noqa: E402
-from norway_company_agent.admission import admit_wave, plan_family_admission, latency_forecasts  # noqa: E402
+from norway_company_agent.admission import admit_wave, plan_family_admission, latency_forecasts, admitted_modules_by_org  # noqa: E402
 from v0_kernel.storage import atomic_json, atomic_jsonl, read_jsonl, read_jsonl_bytes  # noqa: E402
 
 
@@ -334,10 +334,7 @@ def _run(args) -> None:
         module_family=module_family, expected_seconds=expected_seconds, remaining_seconds=remaining_seconds,
         request_slots=remaining_global if args.max_source_requests != 0 else None,
         family_slots=family_budgets, workers=args.workers, policy=args.source_allocation_policy)
-    admitted_by_org = {
-        org: sorted(module for module, admitted in admission_by_module.items() if org in set(admitted))
-        for org in orgs
-    }
+    admitted_by_org = admitted_modules_by_org(orgs, admission_by_module)
     execution_plan = {
         "required_baseline_modules": ["registry", "accounting_obligation"],
         "requested_optional_modules": sorted(fetch_modules),
