@@ -45,6 +45,15 @@ def _evidence_for(profile: dict[str, Any], field: str) -> dict[str, Any]:
     return records.get(module, {})
 
 
+def _values_equal(field: str, old: Any, new: Any) -> bool:
+    if field == "roles.roles" and isinstance(old, list) and isinstance(new, list):
+        # Order is not a role fact. Keep multiplicity, all role attributes and
+        # original evidence arrays; only compare canonical multisets here.
+        canonical = lambda rows: sorted(json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False) for row in rows)
+        return canonical(old) == canonical(new)
+    return old == new
+
+
 def diff_profile(previous: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
     old_org = previous.get("organisation_number")
     new_org = current.get("organisation_number")
@@ -54,7 +63,7 @@ def diff_profile(previous: dict[str, Any], current: dict[str, Any]) -> list[dict
     for field, path in TRACKED_FIELDS.items():
         old_value = _read(previous, path)
         new_value = _read(current, path)
-        if old_value == new_value:
+        if _values_equal(field, old_value, new_value):
             continue
         record = _evidence_for(current, field)
         previous_record = _evidence_for(previous, field)
@@ -110,7 +119,7 @@ def supported_change(org: str, field: str, old: dict, new: dict) -> dict | None:
             return projected.get(name)
         return data.get(name) if isinstance(data, dict) else None
     a, b = value(old), value(new)
-    if a is None or b is None or a == b:
+    if a is None or b is None or _values_equal(field, a, b):
         return None
     change = {"organisation_number": org, "field": field, "old_value": a, "new_value": b,
         "source_url": new.get("source_url"), "retrieved_at": new.get("retrieved_at"),
