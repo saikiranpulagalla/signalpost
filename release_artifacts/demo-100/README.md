@@ -7,16 +7,17 @@ is required. This is a demonstration artifact, not the evaluator's fresh output.
 Exactly 100 unique invented fixture identities, labelled `SYNTHETIC DEMO`, are
 included. Check-digit-valid numbers are generated for testing, not selected as
 real company research; a coincidental real number does not authenticate its fake
-name. No company, website, news or jobs source was contacted. All names and legal
-forms are synthetic. BRREG source identifiers in fixture evidence describe the
+name. No company, website, news or jobs source was contacted. All names, financial
+values, leadership and legal forms are synthetic. BRREG identifiers describe the
 runner's schema, **not genuine BRREG observations of these invented facts**.
 
-Generated through the actual competition runner and unchanged HTML renderer from
+Generated through the actual competition runner and improved HTML renderer from
 Revision 1 `bb5be847ec9bf67509de83f97c937ff1d8370d19` (runtime `164065e...`).
-This artifact-only descendant changes no research behavior. Data is authored
+The renderer now compares actual financial/leadership values and citations.
+Official research behavior is unchanged. Data is authored
 synthetic test data; no source bodies, personal data or private keys are published.
 The recorded loading/run timestamps are execution times, not real-world effective
-dates. It demonstrates 300 baseline claims, not live recall or enrichment quality.
+dates. It demonstrates 306 claims, not live recall or enrichment quality.
 
 Included: input, frozen fixture CSV, ordered envelopes/profiles, report, completed
 manifest and standalone HTML. Manifest verification binds the original profile,
@@ -32,15 +33,23 @@ uv run --no-sync python -S scripts/build_100_company_demo.py --output-dir out/de
 ```
 
 The builder refuses existing destinations and verifies completion, independent
-physical-LF membership/hashes, viewer/profile parity and zero physical source
-requests. It leaves generated authentication keys private and ignored; never
+physical-LF membership/hashes and viewer/profile parity. An injected transport
+replaces source requests and blocks DNS/socket/urllib access. Authorized policy
+exercises actual runner admission/accounting: 200 simulated starts, zero external
+requests. All responses, including missing/blocked outcomes, are synthetic.
+It leaves generated authentication keys private and ignored; never
 publish them. Canonical claims are deterministic; run timestamps and byte hashes
 can differ on regeneration. Full provenance and instructions are here rather
 than modifying the generated viewer bytes.
 
-Search and citation controls are present. Comparison shows coverage counts for
-visible companies, not a substantive financial comparison. This baseline-only
-sample has no financial/role/location enrichment, so those comparison counts are
-zero. Browser interaction and laptop/phone layout remain **UNVERIFIED** for this
+Search and citation controls are present. Select any pair independently of search
+and compare actual financial amounts, periods, scope, roles and source links.
+Browser interaction and laptop/phone layout remain **UNVERIFIED** for this
 artifact; structural parity is not browser certification. Synthetic source links
 must not be treated as proof of actual company facts.
+
+Manual laptop/phone checks: search `SYNTHETIC DEMO 001` then its displayed number;
+select companies 001/002 and click Compare selected companies. Check 1,200,000
+versus 2,500,000 NOK income, 125,000 versus -10,000 NOK annual result (2025),
+different synthetic chairs, citation metadata/links and missing/blocked states
+on other profiles. Test narrow-screen scrolling, wrapping and selectors.

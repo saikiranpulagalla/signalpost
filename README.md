@@ -3,7 +3,7 @@
 [100-company standalone sample viewer](release_artifacts/demo-100/viewer.html)
 ([provenance and reproduction](release_artifacts/demo-100/README.md)): download
 the raw HTML and open locally. This is an explicitly **synthetic, zero-network**
-baseline demonstration, not current live research or an official evaluation.
+research demonstration, not current live research or an official evaluation.
 
 **Company research anchored to a Norwegian organisation number, with evidence you can follow.**
 
